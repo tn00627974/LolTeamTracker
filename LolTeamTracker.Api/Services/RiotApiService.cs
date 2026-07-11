@@ -8,22 +8,14 @@ namespace LolTeamTracker.Api.Services
 {
     public class RiotApiService 
     {
-        private readonly HttpClient _httpClient;
-        private readonly IConfiguration _config;
-        private readonly IHttpClientFactory _httpClientFactory;
-        private readonly string _apiKey;
-        private readonly string _baseUrl;
+        private readonly HttpClient _accountClient;
+        private readonly HttpClient _matchClient;
 
-        public RiotApiService(HttpClient httpClient, IConfiguration config, IHttpClientFactory httpClientFactory)
+        public RiotApiService(IHttpClientFactory httpFactory)
         {
-            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
-            _apiKey = _config["RiotApi:ApiKey"] ?? throw new InvalidOperationException("RiotApi:ApiKey is not configured.");
-            _baseUrl = _config["RiotApi:RegionBaseUrl"] ?? throw new InvalidOperationException("RiotApi:RegionBaseUrl is not configured.");
-            _httpClient.DefaultRequestHeaders.Add("X-Riot-Token", _apiKey);
+            _accountClient = httpFactory.CreateClient("Account");
+            _matchClient = httpFactory.CreateClient("Match");
         }
-
 
         /*         
          ---------------------- Riot ----------------------         
@@ -39,9 +31,9 @@ namespace LolTeamTracker.Api.Services
         {
             try
             {
-                var url = $"https://asia.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}";
-                var res = await _httpClient.GetFromJsonAsync<JsonElement>(url);
-                return res.GetProperty("puuid").GetString() ;
+                var response = await _accountClient.GetFromJsonAsync<JsonElement>($"riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}");
+                var puuid = response.GetProperty("puuid").GetString();
+                return puuid ?? "";
             }
             catch (HttpRequestException ex)
             {
@@ -62,16 +54,15 @@ namespace LolTeamTracker.Api.Services
         {
             try
             {
-                var url = $"https://asia.api.riotgames.com/riot/account/v1/accounts/by-puuid/{puuid}";
-                var res = await _httpClient.GetFromJsonAsync<JsonElement>(url);
-                if (res.ValueKind == JsonValueKind.Undefined)
-                    return "No data found";
-                return res.GetProperty("gameName").GetString()+ res.GetProperty("tagLine").GetString();
+                var response = await _accountClient.GetFromJsonAsync<JsonElement>($"riot/account/v1/accounts/by-puuid/{puuid}");
+                var gameName = response.GetProperty("gameName").GetString();
+                var tagLine = response.GetProperty("tagLine").GetString();
+                return $"{gameName}#{tagLine}";
             }
-            catch (HttpRequestException ex)
-            {
-                return $"API Error : {ex.StatusCode} - {ex.Message}";
-            }
+            //catch (HttpRequestException ex)
+            //{
+            //    return $"API Error : {ex.StatusCode} - {ex.Message}"; // TODO 要修正 
+            //}
             catch (Exception ex)
             {
                 return ex.Message;
@@ -85,10 +76,8 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<string> GetMatchSummary(string matchId)
         {
-            var client = _httpClientFactory.CreateClient();
-            var url = $"{_baseUrl}/lol/match/v5/matches/{matchId}?api_key={_apiKey}";
-
-            var response = await client.GetAsync(url);
+            var url = $"lol/match/v5/matches/{matchId}";
+            var response = await _matchClient.GetAsync(url);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -104,10 +93,8 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<string> GetMatchSummaryTimeLine(string matchId)
         {
-            var client = _httpClientFactory.CreateClient();
-            var url = $"{_baseUrl}/lol/match/v5/matches/{matchId}/timeline?api_key={_apiKey}";
-
-            var response = await client.GetAsync(url);
+            var url = $"lol/match/v5/matches/{matchId}/timeline";
+            var response = await _matchClient.GetAsync(url);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -124,8 +111,9 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<List<string>> GetMatchIdsAsync(string puuid,int start=0,int count=10) 
         {
-            var url = $"{_baseUrl}/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}";
-            return await _httpClient.GetFromJsonAsync<List<string>>(url);
+            var url = $"lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}";
+            var response = await _matchClient.GetFromJsonAsync<List<string>>(url);
+            return response ?? [];
         }        
     }
 }

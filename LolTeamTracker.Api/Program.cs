@@ -7,11 +7,31 @@ using Westwind.AspNetCore.LiveReload;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// "AccountBaseUrl": "https://asia.api.riotgames.com",
+builder.Services.AddHttpClient("Account", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["RiotApi:AccountBaseUrl"]!);
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Clear();
+    client.DefaultRequestHeaders.Add("X-Riot-Token",
+        builder.Configuration["RiotApi:ApiKey"]);
+});
+
+// "RegionBaseUrl": "https://sea.api.riotgames.com"
+builder.Services.AddHttpClient("Match", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["RiotApi:RegionBaseUrl"]!);
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Clear();
+    client.DefaultRequestHeaders.Add("X-Riot-Token", 
+        builder.Configuration["RiotApi:ApiKey"]);
+});
+
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddLiveReload();
 builder.Services.AddHttpClient<MatchAnalyzer>(); // 註冊 MatchAnalyzer 
-builder.Services.AddHttpClient<RiotApiService>(); // 註冊 RiotApiService 
+builder.Services.AddScoped<RiotApiService>(); // 註冊 RiotApiService 
 builder.Services.AddScoped<RiotDataDownloader>(provider =>
     new RiotDataDownloader(
         provider.GetRequiredService<IHttpClientFactory>(),

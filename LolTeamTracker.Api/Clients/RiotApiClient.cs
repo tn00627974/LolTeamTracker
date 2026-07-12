@@ -1,17 +1,19 @@
 ﻿using LolTeamTracker.Api.Models;
 using Microsoft.AspNetCore.Mvc;
+using NuGet.Protocol;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace LolTeamTracker.Api.Services
+namespace LolTeamTracker.Api.Clients
 {
-    public class RiotApiService 
+    public class RiotApiClient : IRiotApiClient
     {
         private readonly HttpClient _accountClient;
         private readonly HttpClient _matchClient;
 
-        public RiotApiService(IHttpClientFactory httpFactory)
+        public RiotApiClient(IHttpClientFactory httpFactory)
         {
             _accountClient = httpFactory.CreateClient("Account");
             _matchClient = httpFactory.CreateClient("Match");
@@ -29,20 +31,10 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<string> GetPuuidAsync(string gameName, string tagLine)
         {
-            try
-            {
-                var response = await _accountClient.GetFromJsonAsync<JsonElement>($"riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}");
-                var puuid = response.GetProperty("puuid").GetString();
-                return puuid ?? "";
-            }
-            catch (HttpRequestException ex)
-            {
-                return $"API Error : {ex.StatusCode} - {ex.Message}";
-            }
-            catch (Exception ex)
-            {
-                return ex.Message;
-            }
+            var url = $"riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}";
+            var response = await _accountClient.GetFromJsonAsync<JsonElement>(url);
+            var puuid = response.GetProperty("puuid").GetString();
+            return puuid ?? "";
         }
 
         /// <summary>
@@ -52,21 +44,11 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<string> GetGameNameAsync(string puuid)
         {
-            try
-            {
-                var response = await _accountClient.GetFromJsonAsync<JsonElement>($"riot/account/v1/accounts/by-puuid/{puuid}");
-                var gameName = response.GetProperty("gameName").GetString();
-                var tagLine = response.GetProperty("tagLine").GetString();
-                return $"{gameName}#{tagLine}";
-            }
-            //catch (HttpRequestException ex)
-            //{
-            //    return $"API Error : {ex.StatusCode} - {ex.Message}"; // TODO 要修正 
-            //}
-            catch (Exception ex)
-            {
-                return ex.Message;
-            }
+            var url = $"riot/account/v1/accounts/by-puuid/{puuid}";
+            var response = await _accountClient.GetFromJsonAsync<JsonElement>(url);
+            var gameName = response.GetProperty("gameName");
+            var tagLine = response.GetProperty("tagLine");
+            return $"{gameName}#{tagLine}";
         }
 
         /// <summary>
@@ -74,15 +56,11 @@ namespace LolTeamTracker.Api.Services
         /// </summary>
         /// <param name="matchId">遊戲場次編號</param>
         /// <returns></returns>
-        public async Task<string> GetMatchSummary(string matchId)
+        public async Task<JsonElement> GetMatchSummaryAsync(string matchId)
         {
             var url = $"lol/match/v5/matches/{matchId}";
-            var response = await _matchClient.GetAsync(url);
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            var json = await response.Content.ReadAsStringAsync();
-            return json;
+            var response = await _matchClient.GetFromJsonAsync<JsonElement>(url);
+            return response;
         }
 
 
@@ -91,15 +69,12 @@ namespace LolTeamTracker.Api.Services
         /// </summary>
         /// <param name="matchId">遊戲場次編號</param>
         /// <returns></returns>
-        public async Task<string> GetMatchSummaryTimeLine(string matchId)
+        public async Task<JsonElement> GetMatchSummaryTimeLineAsync(string matchId)
         {
             var url = $"lol/match/v5/matches/{matchId}/timeline";
-            var response = await _matchClient.GetAsync(url);
-            if (!response.IsSuccessStatusCode)
-                return null;
+            var response = await _matchClient.GetFromJsonAsync<JsonElement>(url);
 
-            var json = await response.Content.ReadAsStringAsync();
-            return json;
+            return response;
         }
 
         /// <summary>

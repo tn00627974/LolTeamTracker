@@ -1,4 +1,5 @@
-﻿using LolTeamTracker.Api.Models;
+﻿using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using NuGet.Packaging.Signing;
@@ -9,28 +10,14 @@ namespace LolTeamTracker.Api.Services
 {
     public class MatchAnalyzer
     {
-        private readonly RiotApiService _riotApiService;
-        private readonly IConfiguration _config;
+        private readonly IRiotApiClient _riotApiClient;
         private readonly IWebHostEnvironment _env;
-        private readonly HttpClient _httpClient;
-        private readonly string _apiKey;
-        private readonly string _baseUrl;
 
-
-        public MatchAnalyzer(RiotApiService riotApiService , IConfiguration config ,IWebHostEnvironment env,HttpClient httpClient)
+        public MatchAnalyzer( IRiotApiClient riotApiClient, IWebHostEnvironment env)
         {
-            _riotApiService = riotApiService;
+            _riotApiClient = riotApiClient;
             _env = env;
-            _httpClient = httpClient;
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-            _apiKey = _config["RiotApi:ApiKey"] ?? throw new InvalidOperationException("RiotApi:ApiKey is not configured.");
-            _baseUrl = _config["RiotApi:RegionBaseUrl"] ?? throw new InvalidOperationException("RiotApi:RegionBaseUrl is not configured.");
-            _httpClient.DefaultRequestHeaders.Add("X-Riot-Token", _apiKey);
         }
-
-        /*         
-         ---------------------- match ----------------------         
-         */
 
         /// <summary>
         /// 用 matchId 查比賽列表細節
@@ -42,8 +29,12 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<MatchSummary?> GetMatchSummaryAsync(string matchId, string puuid, string gameName, string tagLine)
         {
-            var url = $"{_baseUrl}/lol/match/v5/matches/{matchId}"; // {matchId} : 遊戲對戰編號
-            var data = await _httpClient.GetFromJsonAsync<JsonElement>(url);
+            // TODO : 要改用 RIOT API Client 取得比賽資料，現在是直接用 HttpClient 取得
+            //var url = $"/lol/match/v5/matches/{matchId}"; // {matchId} : 遊戲對戰編號
+            //var data = await _matchClient.GetFromJsonAsync<JsonElement>(url);
+            var data = await _riotApiClient.GetMatchSummaryAsync(matchId);
+
+            // TODO : refactor : 換model裝 GetProperty ..
             var info = data.GetProperty("info");
             var participant = info.GetProperty("participants")
                                   .EnumerateArray()
@@ -92,6 +83,7 @@ namespace LolTeamTracker.Api.Services
                 GameMode = queueName,
                 LaneCS = laneCS,
                 JungleCS = jungleCS,
+                TotalCS = totalCS,
                 Gold = gold
             };
         }
@@ -105,7 +97,7 @@ namespace LolTeamTracker.Api.Services
             var players = await LoadTeamFromJson("team.json");
             var allResults = new List<MatchSummary>();
 
-            // 要先用 RiotApiService 取得成員的 puuid 
+            // 要先用 riotApiClient 取得成員的 puuid 
             foreach (var player in players)
             {
                 // 取得玩家的 puuid
@@ -114,14 +106,14 @@ namespace LolTeamTracker.Api.Services
                     allResults.AddRange(summaries); // 將每個玩家的比賽列表加入到總結果中
 
                 #region Old 
-                //var puuid = await _riotApiService.GetPuuidAsync(player.gameName, player.tagLine);
+                //var puuid = await _riotApiClient.GetPuuidAsync(player.gameName, player.tagLine);
                 //if (string.IsNullOrEmpty(puuid))
                 //{
                 //    Console.WriteLine($"無法取得 {player.gameName} 的 puuid");
                 //    continue;
                 //}
                 //// 取得玩家的比賽列表
-                //var matchIds = await _riotApiService.GetMatchIdsAsync(puuid, 0, 10);
+                //var matchIds = await _riotApiClient.GetMatchIdsAsync(puuid, 0, 10);
                 //foreach (var matchId in matchIds)
                 //{
                 //    // 分析每場比賽
@@ -145,11 +137,11 @@ namespace LolTeamTracker.Api.Services
         /// <param name="tagLine">#標籤</param>
         /// <param name="count">搜尋場次</param>
         /// <returns></returns>
-        public async Task<List<MatchSummary>> GetMatchSummariesPlayerAsync(string gameName, string tagLine, int count = 50)
+        public async Task<List<MatchSummary>> GetMatchSummariesPlayerAsync(string gameName, string tagLine, int count)
         {
             var result = new List<MatchSummary>();
-            var puuid = await _riotApiService.GetPuuidAsync(gameName, tagLine);
-            var matchIds = await _riotApiService.GetMatchIdsAsync(puuid, 0, count);
+            var puuid = await _riotApiClient.GetPuuidAsync(gameName, tagLine);
+            var matchIds = await _riotApiClient.GetMatchIdsAsync(puuid, 0, count);
 
             foreach (var matchId in matchIds)
             {

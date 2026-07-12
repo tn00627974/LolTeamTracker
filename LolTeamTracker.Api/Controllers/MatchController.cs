@@ -8,13 +8,11 @@ namespace LolTeamTracker.Api.Controllers;
 [Route("api/[controller]")]
 public class MatchController : ControllerBase
 {
-    //private readonly RiotApiService _riotApiService;
     private readonly MatchAnalyzer _matchAnalyzer;
 
 
     public MatchController (MatchAnalyzer matchAnalyzer)
     {
-        //_riotApiService = riotApiService;
         _matchAnalyzer = matchAnalyzer;
     }
 
@@ -35,8 +33,8 @@ public class MatchController : ControllerBase
 
         //if (count <= 0) { count = 50; }
         //else if (count > 100) { count = 100; }
-        //var puuid = await _riotApiService.GetPuuidAsync(gameName, tagLine); 
-        //var matchIds = await _riotApiService.GetMatchIdsAsync(puuid,0,count);
+        //var puuid = await _RiotApiClient.GetPuuidAsync(gameName, tagLine); 
+        //var matchIds = await _RiotApiClient.GetMatchIdsAsync(puuid,0,count);
         //var result = new List<MatchSummary>();
 
         // 預設0~100不得超過API限制

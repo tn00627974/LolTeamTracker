@@ -6,6 +6,7 @@ using System;
 using LolTeamTracker.Api.Services;
 using System.Net.Http;
 using System.Xml.Linq;
+using LolTeamTracker.Api.Clients;
 
 namespace LolTeamTracker.Api.Controllers
 {
@@ -13,14 +14,14 @@ namespace LolTeamTracker.Api.Controllers
     [ApiController]
     public class RiotController : ControllerBase
     {
-        private readonly RiotApiService _riot;
-        private readonly RiotDataDownloader _riotDataDownloader;
+        private readonly IRiotApiClient _riotApiClient;
+        private readonly RiotDataDownloader _riotApiClientDataDownloader;
         private readonly IWebHostEnvironment _env;
 
-        public RiotController(RiotApiService riot ,RiotDataDownloader riotDataDownloader, IWebHostEnvironment env)
+        public RiotController(IRiotApiClient riotApiClient, RiotDataDownloader riotDataDownloader, IWebHostEnvironment env)
         {
-            _riot = riot;
-            _riotDataDownloader = riotDataDownloader;
+            _riotApiClient = riotApiClient;
+            _riotApiClientDataDownloader = riotDataDownloader;
             _env = env;
         }
 
@@ -33,7 +34,7 @@ namespace LolTeamTracker.Api.Controllers
         [HttpGet("players/puuid")]
         public async Task<IActionResult> GetPuuid(string gameName, string tagLine)
         {
-            var puuid = await _riot.GetPuuidAsync(gameName, tagLine);
+            var puuid = await _riotApiClient.GetPuuidAsync(gameName, tagLine);
             return Ok(puuid);
         }
 
@@ -45,7 +46,7 @@ namespace LolTeamTracker.Api.Controllers
         [HttpGet("players/{puuid}")]
         public async Task<IActionResult> GetGameName(string puuid)
         {
-            var playerInfo = await _riot.GetGameNameAsync(puuid);
+            var playerInfo = await _riotApiClient.GetGameNameAsync(puuid);
             return Ok(playerInfo);
         }
 
@@ -57,11 +58,8 @@ namespace LolTeamTracker.Api.Controllers
         [HttpGet("matchId")]
         public async Task<IActionResult> GetMatchSummary(string matchId)
         {
-            var result = await _riot.GetMatchSummary(matchId);
-            if (result == null)
-                return StatusCode(500, "查詢失敗");
-
-            return Content(result, "application/json");
+            var result = await _riotApiClient.GetMatchSummaryAsync(matchId);
+            return Ok(result);
         }
 
         /// <summary>
@@ -72,11 +70,8 @@ namespace LolTeamTracker.Api.Controllers
         [HttpGet("matchId-timeline")]
         public async Task<IActionResult> GetMatchIdsTimeList(string matchId)
         {
-            var result = await _riot.GetMatchSummaryTimeLine(matchId);
-            if (result == null)
-                return StatusCode(500, "查詢失敗");
-
-            return Content(result, "application/json");
+            var result = await _riotApiClient.GetMatchSummaryTimeLineAsync(matchId);
+            return Ok(result);
         }
 
         /// <summary>
@@ -88,7 +83,7 @@ namespace LolTeamTracker.Api.Controllers
         [HttpGet("match-ids")]
         public async Task<IActionResult> GetMatchIds(string puuid, int count = 10)
         {
-            var matchId = await _riot.GetMatchIdsAsync(puuid, count);
+            var matchId = await _riotApiClient.GetMatchIdsAsync(puuid, count);
             return Ok(matchId);
         }
 
@@ -103,10 +98,10 @@ namespace LolTeamTracker.Api.Controllers
                 var resultList = new List<string>();
 
                 #region Old : 若失敗就只回傳單一成功與失敗
-                //resultList.Add(await _riotDataDownloader.DownloadLatestChampionJsonAsync());
-                //resultList.Add(await _riotDataDownloader.DownloadLatestItemJsonAsync());
-                //resultList.Add(await _riotDataDownloader.DownloadLatestSummonerJsonAsync());
-                //resultList.Add(await _riotDataDownloader.DownloadLatestRunesReforgedJsonAsync());
+                //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestChampionJsonAsync());
+                //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestItemJsonAsync());
+                //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestSummonerJsonAsync());
+                //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestRunesReforgedJsonAsync());
                 #endregion
 
                 #region 進階 : 先下載並返回成功與失敗的結果
@@ -123,10 +118,10 @@ namespace LolTeamTracker.Api.Controllers
                     }
                 }
 
-                await TryDownload(_riotDataDownloader.DownloadLatestChampionJsonAsync, "Champion");
-                await TryDownload(_riotDataDownloader.DownloadLatestItemJsonAsync, "Item");
-                await TryDownload(_riotDataDownloader.DownloadLatestSummonerJsonAsync, "Summoner");
-                await TryDownload(_riotDataDownloader.DownloadLatestRunesReforgedJsonAsync, "Runes");
+                await TryDownload(_riotApiClientDataDownloader.DownloadLatestChampionJsonAsync, "Champion");
+                await TryDownload(_riotApiClientDataDownloader.DownloadLatestItemJsonAsync, "Item");
+                await TryDownload(_riotApiClientDataDownloader.DownloadLatestSummonerJsonAsync, "Summoner");
+                await TryDownload(_riotApiClientDataDownloader.DownloadLatestRunesReforgedJsonAsync, "Runes");
                 #endregion
 
                 return Ok(new

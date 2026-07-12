@@ -1,4 +1,5 @@
-﻿using LolTeamTracker.Api.Services;
+﻿using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
@@ -27,11 +28,12 @@ builder.Services.AddHttpClient("Match", client =>
         builder.Configuration["RiotApi:ApiKey"]);
 });
 
+
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddLiveReload();
-builder.Services.AddHttpClient<MatchAnalyzer>(); // 註冊 MatchAnalyzer 
-builder.Services.AddScoped<RiotApiService>(); // 註冊 RiotApiService 
+builder.Services.AddScoped<MatchAnalyzer>(); 
+builder.Services.AddScoped<IRiotApiClient, RiotApiClient>(); 
 builder.Services.AddScoped<RiotDataDownloader>(provider =>
     new RiotDataDownloader(
         provider.GetRequiredService<IHttpClientFactory>(),

@@ -1,4 +1,5 @@
 ﻿using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Repositories;
 using LolTeamTracker.Api.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
@@ -32,8 +33,10 @@ builder.Services.AddHttpClient("Match", client =>
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddLiveReload();
-builder.Services.AddScoped<MatchAnalyzer>(); 
-builder.Services.AddScoped<IRiotApiClient, RiotApiClient>(); 
+builder.Services.AddScoped<IMatchAnalyzer,MatchAnalyzer>(); 
+builder.Services.AddScoped<IRiotApiClient, RiotApiClient>();
+builder.Services.AddScoped<ITeamRepository, TeamRepository>();
+
 builder.Services.AddScoped<RiotDataDownloader>(provider =>
     new RiotDataDownloader(
         provider.GetRequiredService<IHttpClientFactory>(),

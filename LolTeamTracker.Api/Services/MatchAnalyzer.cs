@@ -1,22 +1,19 @@
 ﻿using LolTeamTracker.Api.Clients;
 using LolTeamTracker.Api.Models;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc;
-using NuGet.Packaging.Signing;
-using System.Diagnostics;
 using System.Text.Json;
+using LolTeamTracker.Api.Repositories;
 
 namespace LolTeamTracker.Api.Services
 {
-    public class MatchAnalyzer
+    public class MatchAnalyzer : IMatchAnalyzer
     {
         private readonly IRiotApiClient _riotApiClient;
-        private readonly IWebHostEnvironment _env;
+        private readonly ITeamRepository _teamRepository;
 
-        public MatchAnalyzer( IRiotApiClient riotApiClient, IWebHostEnvironment env)
+        public MatchAnalyzer( IRiotApiClient riotApiClient, ITeamRepository teamRepository)
         {
             _riotApiClient = riotApiClient;
-            _env = env;
+            _teamRepository = teamRepository;
         }
 
         /// <summary>
@@ -29,9 +26,6 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<MatchSummary?> GetMatchSummaryAsync(string matchId, string puuid, string gameName, string tagLine)
         {
-            // TODO : 要改用 RIOT API Client 取得比賽資料，現在是直接用 HttpClient 取得
-            //var url = $"/lol/match/v5/matches/{matchId}"; // {matchId} : 遊戲對戰編號
-            //var data = await _matchClient.GetFromJsonAsync<JsonElement>(url);
             var data = await _riotApiClient.GetMatchSummaryAsync(matchId);
 
             // TODO : refactor : 換model裝 GetProperty ..
@@ -94,7 +88,7 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<List<MatchSummary>> GetMatchSummariesTeamsAsync()
         {
-            var players = await LoadTeamFromJson("team.json");
+            var players = await _teamRepository.LoadTeamFromDataAsync();
             var allResults = new List<MatchSummary>();
 
             // 要先用 riotApiClient 取得成員的 puuid 
@@ -160,25 +154,6 @@ namespace LolTeamTracker.Api.Services
             return result;
         }
 
-        /// <summary>
-        /// 載入 JSON 檔案中的成員資料
-        /// </summary>
-        /// <param name="fileName"></param>
-        /// <returns></returns>
-        /// <exception cref="FileNotFoundException"></exception>
-        private async Task<List<PlayerInfo>> LoadTeamFromJson(string fileName)
-        {
-            string savePath = Path.Combine(_env.ContentRootPath, "Data", "Team", fileName); // Path : Data/Team/team.json
-            if (!File.Exists(savePath))
-            {
-                throw new FileNotFoundException($"檔案 {fileName} 不存在於 {savePath}");
-            }
-            string json = await File.ReadAllTextAsync(savePath);
-            // 這裡可以解析 JSON 並返回所需的資料
-            var team = JsonSerializer.Deserialize<List<PlayerInfo>>(json);
-            return team ?? new List<PlayerInfo>();
-        }
-
         /*         
          ---------------------- Helpers ----------------------         
          */
@@ -188,7 +163,7 @@ namespace LolTeamTracker.Api.Services
         /// </summary>
         /// <param name="queueId">模式編號</param>
         /// <returns>返回模式名稱</returns>
-        public static string GetQueueTypeName(int queueId)
+        public string GetQueueTypeName(int queueId)
         {
             switch (queueId)
             {
@@ -208,7 +183,7 @@ namespace LolTeamTracker.Api.Services
         /// </summary>
         /// <param name="teamPosition"></param>
         /// <returns>返回玩家路線</returns>
-        public static string GetLaneName(string teamPosition)
+        public string GetLaneName(string teamPosition)
         {
             switch (teamPosition)
             {

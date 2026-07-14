@@ -8,10 +8,10 @@ namespace LolTeamTracker.Api.Controllers;
 [Route("api/[controller]")]
 public class MatchController : ControllerBase
 {
-    private readonly MatchAnalyzer _matchAnalyzer;
+    private readonly IMatchAnalyzer _matchAnalyzer;
 
 
-    public MatchController (MatchAnalyzer matchAnalyzer)
+    public MatchController (IMatchAnalyzer matchAnalyzer)
     {
         _matchAnalyzer = matchAnalyzer;
     }

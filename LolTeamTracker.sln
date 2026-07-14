@@ -4,9 +4,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 17.13.35818.85
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LolTeamTracker.Web", "LolTeamTracker.Web\LolTeamTracker.Web.csproj", "{F36353B9-E835-418B-98CD-AABD404B8B9E}"
-	ProjectSection(ProjectDependencies) = postProject
-		{FAF2EF90-7C45-49EF-8473-28887C468190} = {FAF2EF90-7C45-49EF-8473-28887C468190}
-	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LolTeamTracker.Api", "LolTeamTracker.Api\LolTeamTracker.Api.csproj", "{FAF2EF90-7C45-49EF-8473-28887C468190}"
 EndProject

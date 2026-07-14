@@ -15,7 +15,9 @@
 
         public int LaneCS { get; set; } // totalMinionsKilled 線上小兵
         public int JungleCS { get; set; } // neutralMinionsKilled 野怪
-        public int TotalCS => LaneCS + JungleCS; // 計算總吃兵
+
+        //public int TotalCS => LaneCS + JungleCS; // 計算總吃兵
+        public int TotalCS; // 計算總吃兵
 
         public int Gold { get; set; } 
     }

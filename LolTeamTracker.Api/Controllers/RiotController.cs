@@ -93,51 +93,40 @@ namespace LolTeamTracker.Api.Controllers
         [HttpGet("download-all-json")]
         public async Task<IActionResult> DownloadChampionData()
         {
-            try
+            var resultList = new List<string>();
+
+            #region Old : 若失敗就只回傳單一成功與失敗
+            //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestChampionJsonAsync());
+            //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestItemJsonAsync());
+            //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestSummonerJsonAsync());
+            //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestRunesReforgedJsonAsync());
+            #endregion
+
+            #region 進階 : 先下載並返回成功與失敗的結果
+            async Task TryDownload(Func<Task<string>> downloadFunc, string name)
             {
-                var resultList = new List<string>();
-
-                #region Old : 若失敗就只回傳單一成功與失敗
-                //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestChampionJsonAsync());
-                //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestItemJsonAsync());
-                //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestSummonerJsonAsync());
-                //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestRunesReforgedJsonAsync());
-                #endregion
-
-                #region 進階 : 先下載並返回成功與失敗的結果
-                async Task TryDownload(Func<Task<string>> downloadFunc, string name)
+                try
                 {
-                    try
-                    {
-                        var result = await downloadFunc();
-                        resultList.Add($"{name}: ✅ {result}");
-                    }
-                    catch (Exception ex)
-                    {
-                        resultList.Add($"{name}: ❌ 錯誤 - {ex.Message}");
-                    }
+                    var result = await downloadFunc();
+                    resultList.Add($"{name}: ✅ {result}");
                 }
-
-                await TryDownload(_riotApiClientDataDownloader.DownloadLatestChampionJsonAsync, "Champion");
-                await TryDownload(_riotApiClientDataDownloader.DownloadLatestItemJsonAsync, "Item");
-                await TryDownload(_riotApiClientDataDownloader.DownloadLatestSummonerJsonAsync, "Summoner");
-                await TryDownload(_riotApiClientDataDownloader.DownloadLatestRunesReforgedJsonAsync, "Runes");
-                #endregion
-
-                return Ok(new
+                catch (Exception ex)
                 {
-                    message = "所有檔案處理完畢",
-                    results = resultList
-                });
+                    resultList.Add($"{name}: ❌ 錯誤 - {ex.Message}");
+                }
             }
-            catch (Exception ex)
+
+            await TryDownload(_riotApiClientDataDownloader.DownloadLatestChampionJsonAsync, "Champion");
+            await TryDownload(_riotApiClientDataDownloader.DownloadLatestItemJsonAsync, "Item");
+            await TryDownload(_riotApiClientDataDownloader.DownloadLatestSummonerJsonAsync, "Summoner");
+            await TryDownload(_riotApiClientDataDownloader.DownloadLatestRunesReforgedJsonAsync, "Runes");
+            #endregion
+
+            return Ok(new
             {
-                return StatusCode(500, new 
-                { 
-                    message = "下載失敗", 
-                    error = ex.Message 
-                });
-            }
+                message = "所有檔案處理完畢",
+                results = resultList
+            });
         }
     }
 }

@@ -76,15 +76,8 @@ public class MatchController : ControllerBase
     [HttpGet("team-analysis")]
     public async Task<IActionResult> GetMatchTeamList()
     {
-        try
-        {
-            var results = await _matchAnalyzer.GetMatchSummariesTeamsAsync();
-            return Ok(results);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"錯誤：{ex.Message}");
-        }
+        var results = await _matchAnalyzer.GetMatchSummariesTeamsAsync();
+        return Ok(results);
     }
 
 }

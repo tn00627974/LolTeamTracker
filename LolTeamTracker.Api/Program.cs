@@ -1,7 +1,7 @@
 ﻿using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Middleware;
 using LolTeamTracker.Api.Repositories;
 using LolTeamTracker.Api.Services;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
 using Westwind.AspNetCore.LiveReload;
@@ -29,6 +29,9 @@ builder.Services.AddHttpClient("Match", client =>
         builder.Configuration["RiotApi:ApiKey"]);
 });
 
+// 全域例外處理 GlobalException
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -76,13 +79,6 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-// 測試：呼叫 RunAsync()
-//using (var scope = app.Services.CreateScope())
-//{
-//    var analyzer = scope.ServiceProvider.GetRequiredService<MatchAnalyzer>();
-//    await analyzer.RunAsync(); // 執行分析
-//}
-
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -93,15 +89,10 @@ if (app.Environment.IsDevelopment())
     {
         options.RoutePrefix = "redoc"; // 最終網址 http://localhost:xxxx/redoc
     });
-    app.UseDeveloperExceptionPage(); // 顯示詳細錯誤
 }
 
-//app.UseStaticFiles();  // 暫時不用 wwwroot\StaticFiles 
-
+app.UseExceptionHandler();
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();

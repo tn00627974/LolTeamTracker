@@ -9,15 +9,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Remove="Views\component.cshtml" />
+    <Compile Remove="Helpers\**" />
+    <Compile Remove="Views\**" />
+    <Content Remove="Helpers\**" />
+    <Content Remove="Views\**" />
+    <EmbeddedResource Remove="Helpers\**" />
+    <EmbeddedResource Remove="Views\**" />
+    <None Remove="Helpers\**" />
+    <None Remove="Views\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Helpers\" />
-    <Folder Include="Views\" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.1.1" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
     <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.7" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
     <PackageReference Include="Swashbuckle.AspNetCore.ReDoc" Version="8.1.4" />

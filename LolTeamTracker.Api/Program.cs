@@ -1,4 +1,6 @@
-﻿using LolTeamTracker.Api.Clients;
+﻿using FluentValidation;
+using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Filters;
 using LolTeamTracker.Api.Middleware;
 using LolTeamTracker.Api.Repositories;
 using LolTeamTracker.Api.Services;
@@ -33,9 +35,17 @@ builder.Services.AddHttpClient("Match", client =>
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
+// FluentValidation 驗證器註冊
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
 // Add services to the container.
-builder.Services.AddControllers();
 builder.Services.AddLiveReload();
+builder.Services.AddControllers(options =>
+{
+    // 全域驗證器 ( 在 Controller 之前執行過濾 ) 
+    options.Filters.Add<ValidationFilter>();
+});
+
 builder.Services.AddScoped<IMatchAnalyzer,MatchAnalyzer>(); 
 builder.Services.AddScoped<IRiotApiClient, RiotApiClient>();
 builder.Services.AddScoped<ITeamRepository, TeamRepository>();
@@ -82,7 +92,7 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseLiveReload(); // 加這行
+    app.UseLiveReload(); 
     app.UseSwagger();
     app.UseSwaggerUI();
     app.UseReDoc(options =>

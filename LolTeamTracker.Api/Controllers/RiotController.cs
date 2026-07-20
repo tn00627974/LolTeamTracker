@@ -1,12 +1,7 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Mvc;
-using System.Diagnostics;
-using System;
+﻿using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Models.Requests;
 using LolTeamTracker.Api.Services;
-using System.Net.Http;
-using System.Xml.Linq;
-using LolTeamTracker.Api.Clients;
+using Microsoft.AspNetCore.Mvc;
 
 namespace LolTeamTracker.Api.Controllers
 {
@@ -41,12 +36,12 @@ namespace LolTeamTracker.Api.Controllers
         /// <summary>
         /// 根據玩家的puuid獲取遊戲名稱和標籤
         /// </summary>
-        /// <param name="puuid"></param>
+        /// <param name="request"></param>
         /// <returns></returns>
         [HttpGet("players/{puuid}")]
-        public async Task<IActionResult> GetGameName(string puuid)
+        public async Task<IActionResult> GetGameName ([FromRoute] GetGameNameRequest request)
         {
-            var playerInfo = await _riotApiClient.GetGameNameAsync(puuid);
+            var playerInfo = await _riotApiClient.GetGameNameAsync(request.Puuid);
             return Ok(playerInfo);
         }
 

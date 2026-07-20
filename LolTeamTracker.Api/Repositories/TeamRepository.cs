@@ -23,9 +23,16 @@ namespace LolTeamTracker.Api.Repositories
             {
                 throw new FileNotFoundException($"檔案不存在於 {savePath}");
             }
+
+            // 將 JSON 反序列化為 List<PlayerInfo>，將屬性轉為CamelCase(駝峰)去比對team.json中的屬性名稱
+            var options = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+
             string json = await File.ReadAllTextAsync(savePath);
             // 這裡可以解析 JSON 並返回所需的資料
-            var team = JsonSerializer.Deserialize<List<PlayerInfo>>(json);
+            var team = JsonSerializer.Deserialize<List<PlayerInfo>>(json, options);
             return team ?? new List<PlayerInfo>();
         }
     }

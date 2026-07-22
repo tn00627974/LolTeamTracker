@@ -39,7 +39,7 @@ namespace LolTeamTracker.Api.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpGet("players/{puuid}")]
-        public async Task<IActionResult> GetGameName ([FromRoute] GetGameNameRequest request)
+        public async Task<IActionResult> GetGameName([FromRoute] GetGameNameRequest request)
         {
             var playerInfo = await _riotApiClient.GetGameNameAsync(request.Puuid);
             return Ok(playerInfo);
@@ -48,24 +48,24 @@ namespace LolTeamTracker.Api.Controllers
         /// <summary>
         /// 查詢單場詳細資訊
         /// </summary>
-        /// <param name="matchId">場次編號</param>
+        /// <param name="request">場次編號</param>
         /// <returns></returns>
-        [HttpGet("matchId")]
-        public async Task<IActionResult> GetMatchSummary(string matchId)
+        [HttpGet("matches/{matchId}")]
+        public async Task<IActionResult> GetMatchSummary([FromRoute] GetMatchIdRequest request)
         {
-            var result = await _riotApiClient.GetMatchSummaryAsync(matchId);
+            var result = await _riotApiClient.GetMatchSummaryAsync(request.MatchId);
             return Ok(result);
         }
 
         /// <summary>
         /// 查詢單場詳細資訊 (含時間軸)
         /// </summary>
-        /// <param name="matchId">場次編號</param>
+        /// <param name="request">場次編號</param>
         /// <returns></returns>
-        [HttpGet("matchId-timeline")]
-        public async Task<IActionResult> GetMatchIdsTimeList(string matchId)
+        [HttpGet("matches/{matchId}/timeline")]
+        public async Task<IActionResult> GetMatchIdsTimeList([FromRoute] GetMatchIdRequest request)
         {
-            var result = await _riotApiClient.GetMatchSummaryTimeLineAsync(matchId);
+            var result = await _riotApiClient.GetMatchSummaryTimeLineAsync(request.MatchId);
             return Ok(result);
         }
 

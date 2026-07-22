@@ -83,6 +83,7 @@ builder.Services.AddSwaggerGen(options =>
     // Swagger API網址加入XML註解
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
+    options.DescribeAllParametersInCamelCase(); // 路由都轉小寫
 });
 
 

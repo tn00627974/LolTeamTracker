@@ -95,7 +95,7 @@ namespace LolTeamTracker.Api.Services
             foreach (var player in players)
             {
                 // 取得玩家的 puuid
-                var summaries = await GetMatchSummariesPlayerAsync(player.gameName, player.tagLine ,10);
+                var summaries = await GetMatchSummariesPlayerAsync(player.GameName, player.TagLine ,10);
                 if (summaries != null)
                     allResults.AddRange(summaries); // 將每個玩家的比賽列表加入到總結果中
 

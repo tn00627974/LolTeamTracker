@@ -32,9 +32,15 @@ namespace LolTeamTracker.Api.Validators
                 .Matches(@"^[A-Z0-9]+_\d+$") 
                 .WithMessage("MatchIds 格式不正確");
         }
-        // TODO(子文): ValidCount 想一下——兩個端點範圍不一樣，這條規則是不是該吃 (int min, int max) 參數？
 
+        public static IRuleBuilderOptions<T, string> ValidGameName<T>(this IRuleBuilder<T, string> rule)
+        {
+            return rule.NotEmpty().WithMessage("GameName 不可為空");
+        }
+
+        public static IRuleBuilderOptions<T, string> ValidTagLine<T>(this IRuleBuilder<T, string> rule)
+        {
+            return rule.NotEmpty().WithMessage("TagLine 不可為空");
+        }
     }
-
-
 }

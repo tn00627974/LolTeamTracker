@@ -11,32 +11,27 @@ namespace LolTeamTracker.Api.Controllers
     {
         private readonly IRiotApiClient _riotApiClient;
         private readonly RiotDataDownloader _riotApiClientDataDownloader;
-        private readonly IWebHostEnvironment _env;
 
-        public RiotController(IRiotApiClient riotApiClient, RiotDataDownloader riotDataDownloader, IWebHostEnvironment env)
+        public RiotController(IRiotApiClient riotApiClient, RiotDataDownloader riotDataDownloader )
         {
             _riotApiClient = riotApiClient;
             _riotApiClientDataDownloader = riotDataDownloader;
-            _env = env;
         }
 
         /// <summary>
         /// 根據遊戲名稱和標籤獲取puuid
         /// </summary>
-        /// <param name="gameName">遊戲名稱</param>
-        /// <param name="tagLine">#標籤</param>
         /// <returns></returns>
-        [HttpGet("players/puuid")]
-        public async Task<IActionResult> GetPuuid(string gameName, string tagLine)
+        [HttpGet("players/{gameName}/{tagLine}")] 
+        public async Task<IActionResult> GetPuuid([FromRoute] GetPuuidRequest request)
         {
-            var puuid = await _riotApiClient.GetPuuidAsync(gameName, tagLine);
+            var puuid = await _riotApiClient.GetPuuidAsync(request.GameName, request.TagLine);
             return Ok(puuid);
         }
 
         /// <summary>
         /// 根據玩家的puuid獲取遊戲名稱和標籤
         /// </summary>
-        /// <param name="request"></param>
         /// <returns></returns>
         [HttpGet("players/{puuid}")]
         public async Task<IActionResult> GetGameName([FromRoute] GetGameNameRequest request)
@@ -46,9 +41,19 @@ namespace LolTeamTracker.Api.Controllers
         }
 
         /// <summary>
+        /// 查該玩家的比賽列表 : 最多100場,預設10場
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet("players/match-ids")] 
+        public async Task<IActionResult> GetMatchIds(GetMatchIdsRequest request)
+        {
+            var result = await _riotApiClient.GetMatchIdsAsync(request.Puuid, 0,request.Count);
+            return Ok(result);
+        }
+
+        /// <summary>
         /// 查詢單場詳細資訊
         /// </summary>
-        /// <param name="request">場次編號</param>
         /// <returns></returns>
         [HttpGet("matches/{matchId}")]
         public async Task<IActionResult> GetMatchSummary([FromRoute] GetMatchIdRequest request)
@@ -60,7 +65,6 @@ namespace LolTeamTracker.Api.Controllers
         /// <summary>
         /// 查詢單場詳細資訊 (含時間軸)
         /// </summary>
-        /// <param name="request">場次編號</param>
         /// <returns></returns>
         [HttpGet("matches/{matchId}/timeline")]
         public async Task<IActionResult> GetMatchIdsTimeList([FromRoute] GetMatchIdRequest request)
@@ -70,22 +74,9 @@ namespace LolTeamTracker.Api.Controllers
         }
 
         /// <summary>
-        /// 查該玩家的比賽列表 : 最多100場,預設10場
-        /// </summary>
-        /// <param name="puuid"></param>
-        /// <param name="count">資料比數</param>
-        /// <returns></returns>
-        [HttpGet("match-ids")]
-        public async Task<IActionResult> GetMatchIds(string puuid, int count = 10)
-        {
-            var matchId = await _riotApiClient.GetMatchIdsAsync(puuid, count);
-            return Ok(matchId);
-        }
-
-        /// <summary>
         /// 下載所有最新的json資料
         /// </summary>
-        [HttpGet("download-all-json")]
+        [HttpPost("download-all-json")]
         public async Task<IActionResult> DownloadChampionData()
         {
             var resultList = new List<string>();

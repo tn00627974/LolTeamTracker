@@ -84,7 +84,7 @@ namespace LolTeamTracker.Api.Clients
         /// <param name="start"></param>
         /// <param name="count"></param>
         /// <returns></returns>
-        public async Task<List<string>> GetMatchIdsAsync(string puuid,int start=0,int count=10) 
+        public async Task<List<string>> GetMatchIdsAsync(string puuid,int start,int count) 
         {
             var url = $"lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}";
             var response = await _matchClient.GetFromJsonAsync<List<string>>(url);

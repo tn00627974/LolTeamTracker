@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using LolTeamTracker.Api.Models.Requests;
+using System.Text.Json;
 
 namespace LolTeamTracker.Api.Clients
 {
@@ -12,6 +13,6 @@ namespace LolTeamTracker.Api.Clients
 
         Task<JsonElement> GetMatchSummaryTimeLineAsync(string matchId);
 
-        Task<List<string>> GetMatchIdsAsync(string puuid, int start = 0, int count = 10);
+        Task<List<string>> GetMatchIdsAsync(string puuid, int start, int count);
     }
 }

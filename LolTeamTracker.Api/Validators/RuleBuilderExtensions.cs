@@ -42,5 +42,18 @@ namespace LolTeamTracker.Api.Validators
         {
             return rule.NotEmpty().WithMessage("TagLine 不可為空");
         }
+
+        /// <summary>
+        /// 驗證 Count 是否落在指定範圍內
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="rule"></param>
+        /// <param name="minCount">允許的最小值</param>
+        /// <param name="maxCount">允許的最大值</param>
+        /// <returns></returns>
+        public static IRuleBuilderOptions<T, int> ValidCount<T>(this IRuleBuilder<T, int> rule, int minCount, int maxCount)
+        {
+            return rule.InclusiveBetween(minCount, maxCount).WithMessage($"Count must be between {minCount} and {maxCount}.");
+        }
     }
 }

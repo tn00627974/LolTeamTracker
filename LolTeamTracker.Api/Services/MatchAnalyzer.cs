@@ -98,28 +98,6 @@ namespace LolTeamTracker.Api.Services
                 var summaries = await GetMatchSummariesPlayerAsync(player.GameName, player.TagLine ,10);
                 if (summaries != null)
                     allResults.AddRange(summaries); // 將每個玩家的比賽列表加入到總結果中
-
-                #region Old 
-                //var puuid = await _riotApiClient.GetPuuidAsync(player.gameName, player.tagLine);
-                //if (string.IsNullOrEmpty(puuid))
-                //{
-                //    Console.WriteLine($"無法取得 {player.gameName} 的 puuid");
-                //    continue;
-                //}
-                //// 取得玩家的比賽列表
-                //var matchIds = await _riotApiClient.GetMatchIdsAsync(puuid, 0, 10);
-                //foreach (var matchId in matchIds)
-                //{
-                //    // 分析每場比賽
-                //    var summary = await _matchAnalyzer.GetMatchSummaryAsync(matchId, puuid, player.gameName, player.tagLine);
-                //    if (summary != null)
-                //    {
-                //        // 在這裡處理比賽摘要，例如儲存到資料庫或進行其他分析
-                //        Console.WriteLine($"分析比賽 {matchId} 成功");
-                //        allResults.Add(summary);
-                //    }
-                //}
-                #endregion
             }
             return allResults;
         }

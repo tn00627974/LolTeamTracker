@@ -41,11 +41,11 @@ namespace LolTeamTracker.Api.Controllers
         }
 
         /// <summary>
-        /// 查該玩家的比賽列表 : 最多100場,預設10場
+        /// 查該玩家的比賽列表 : 預設20場 ~ 50場 , 最多100場
         /// </summary>
         /// <returns></returns>
         [HttpGet("players/match-ids")] 
-        public async Task<IActionResult> GetMatchIds(GetMatchIdsRequest request)
+        public async Task<IActionResult> GetMatchIds([FromQuery] GetMatchIdsRequest request)
         {
             var result = await _riotApiClient.GetMatchIdsAsync(request.Puuid, 0,request.Count);
             return Ok(result);

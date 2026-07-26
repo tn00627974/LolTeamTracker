@@ -1,5 +1,4 @@
-﻿using LolTeamTracker.Api.Models;
-using Microsoft.AspNetCore.Diagnostics;
+﻿using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LolTeamTracker.Api.Middleware

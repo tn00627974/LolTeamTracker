@@ -8,8 +8,7 @@ namespace LolTeamTracker.Api.Validators
         public GetMatchIdsRequestValidator()
         {
             RuleFor(x => x.Puuid).ValidPuuid();
-
-            RuleFor(x => x.Count).InclusiveBetween(10, 100).WithMessage("Count must be between 10 and 100.");
+            RuleFor(x => x.Count).ValidCount(20, 50);
         }
     }
 }

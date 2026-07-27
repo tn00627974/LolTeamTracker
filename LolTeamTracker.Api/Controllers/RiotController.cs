@@ -11,11 +11,15 @@ namespace LolTeamTracker.Api.Controllers
     {
         private readonly IRiotApiClient _riotApiClient;
         private readonly RiotDataDownloader _riotApiClientDataDownloader;
+        private readonly ILogger<RiotController> _logger;
 
-        public RiotController(IRiotApiClient riotApiClient, RiotDataDownloader riotDataDownloader )
+
+
+        public RiotController(IRiotApiClient riotApiClient, RiotDataDownloader riotDataDownloader,ILogger<RiotController> logger )
         {
             _riotApiClient = riotApiClient;
             _riotApiClientDataDownloader = riotDataDownloader;
+            _logger = logger;
         }
 
         /// <summary>
@@ -89,16 +93,18 @@ namespace LolTeamTracker.Api.Controllers
             #endregion
 
             #region 進階 : 先下載並返回成功與失敗的結果
-            async Task TryDownload(Func<Task<string>> downloadFunc, string name)
+            async Task TryDownload(Func<Task<string>> downloadFunc, string fileName)
             {
                 try
                 {
                     var result = await downloadFunc();
-                    resultList.Add($"{name}: ✅ {result}");
+                    resultList.Add($"{fileName}: ✅ {result}");
                 }
                 catch (Exception ex)
                 {
-                    resultList.Add($"{name}: ❌ 錯誤 - {ex.Message}");
+                    resultList.Add($"{fileName}: ❌ 錯誤 - {ex.Message}");
+                    _logger.LogError(ex,"fileName:{fileName}",fileName);
+
                 }
             }
 

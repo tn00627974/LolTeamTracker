@@ -10,6 +10,7 @@ using Westwind.AspNetCore.LiveReload;
 
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddJsonConsole(); 
 
 // "AccountBaseUrl": "https://asia.api.riotgames.com",
 builder.Services.AddHttpClient("Account", client =>

@@ -1,7 +1,7 @@
 ﻿using LolTeamTracker.Api.Clients;
 using LolTeamTracker.Api.Models;
-using System.Text.Json;
 using LolTeamTracker.Api.Repositories;
+using System.Text.Json;
 
 namespace LolTeamTracker.Api.Services
 {
@@ -9,11 +9,13 @@ namespace LolTeamTracker.Api.Services
     {
         private readonly IRiotApiClient _riotApiClient;
         private readonly ITeamRepository _teamRepository;
+        private readonly ILogger<MatchAnalyzer> _logger;
 
-        public MatchAnalyzer( IRiotApiClient riotApiClient, ITeamRepository teamRepository)
+        public MatchAnalyzer( IRiotApiClient riotApiClient, ITeamRepository teamRepository, ILogger<MatchAnalyzer> logger)
         {
             _riotApiClient = riotApiClient;
             _teamRepository = teamRepository;
+            _logger = logger;
         }
 
         /// <summary>
@@ -114,6 +116,7 @@ namespace LolTeamTracker.Api.Services
             var result = new List<MatchSummary>();
             var puuid = await _riotApiClient.GetPuuidAsync(gameName, tagLine);
             var matchIds = await _riotApiClient.GetMatchIdsAsync(puuid, 0, count);
+            int failedCount = 0; // 錯誤次數進catch遞增
 
             foreach (var matchId in matchIds)
             {
@@ -121,12 +124,23 @@ namespace LolTeamTracker.Api.Services
                 {
                     var summary = await GetMatchSummaryAsync(matchId, puuid, gameName, tagLine);
                     if (summary != null)
+                    {
                         result.Add(summary);
+                    }
+                    else 
+                    {
+                        failedCount++;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    // log or skip ?
-                }
+                     failedCount++; // 當發生ex追蹤錯誤次數。
+                    _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId: {MatchId}", gameName, tagLine, matchId);
+                }                
+            }
+            if (failedCount > 0)
+            {
+                _logger.LogWarning("Player: {GameName}#{TagLine} 查詢完成，成功 {SuccessCount} 場，失敗 {FailedCount} 場",gameName, tagLine, result.Count, failedCount);
             }
 
             return result;

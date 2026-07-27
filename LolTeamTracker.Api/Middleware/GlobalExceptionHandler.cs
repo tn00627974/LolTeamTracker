@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
 
 namespace LolTeamTracker.Api.Middleware
 {
@@ -17,9 +18,7 @@ namespace LolTeamTracker.Api.Middleware
             Exception exception,
             CancellationToken cancellationToken)
         {
-            // 先把例外記錄下來
-            logger.LogError(exception, $"Unhandled exception occurred 追蹤代碼：{httpContext.TraceIdentifier}");
-
+            string traceId = Activity.Current?.Id ?? httpContext.TraceIdentifier;
             var (status, title, detail) = exception switch
             {
                 #region ResponseException For Client 
@@ -60,15 +59,20 @@ namespace LolTeamTracker.Api.Middleware
                 #endregion
             };
 
-        // 依例外類型決定狀態碼
-        var problemDetails = new ProblemDetails
+            // 依例外類型決定狀態碼
+            var problemDetails = new ProblemDetails
             {
-                Type = "about:blank",  
+                Type = "about:blank",
                 Title = title,
                 Status = status,
-                Detail = detail,  
-                Instance = httpContext.Request.Path
+                Detail = detail,
+                Instance = httpContext.Request.Path,
+                Extensions = new Dictionary<string, object?> {{ "traceId", traceId }}
             };
+
+            logger.LogError(exception, "Unhandled exception occurred. TraceId: {TraceId}, Title: {Title}, Status: {Status}, Detail: {Detail}",
+    traceId, problemDetails.Title, problemDetails.Status, problemDetails.Detail);
+
 
             // 設定 HTTP 狀態碼
             httpContext.Response.StatusCode = problemDetails.Status.Value;

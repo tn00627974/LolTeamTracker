@@ -50,12 +50,10 @@ builder.Services.AddControllers(options =>
 builder.Services.AddScoped<IMatchAnalyzer,MatchAnalyzer>(); 
 builder.Services.AddScoped<IRiotApiClient, RiotApiClient>();
 builder.Services.AddScoped<ITeamRepository, TeamRepository>();
+builder.Services.AddScoped<StaticDataService>();
+builder.Services.AddScoped<IDataDragonClient, DataDragonClient>();
+builder.Services.AddScoped<IStaticDataRepository, StaticDataRepository>();
 
-builder.Services.AddScoped<RiotDataDownloader>(provider =>
-    new RiotDataDownloader(
-        provider.GetRequiredService<IHttpClientFactory>(),
-        provider.GetRequiredService<IWebHostEnvironment>()
-    ));
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 // Swagger 中介軟體

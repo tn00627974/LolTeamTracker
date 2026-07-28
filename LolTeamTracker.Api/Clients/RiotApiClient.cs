@@ -1,10 +1,4 @@
-﻿using LolTeamTracker.Api.Models;
-using Microsoft.AspNetCore.Mvc;
-using NuGet.Protocol;
-using System.Diagnostics;
-using System.Net.Http;
-using System.Text.Json;
-using System.Threading.Tasks;
+﻿using System.Text.Json;
 
 namespace LolTeamTracker.Api.Clients
 {
@@ -89,6 +83,6 @@ namespace LolTeamTracker.Api.Clients
             var url = $"lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}";
             var response = await _matchClient.GetFromJsonAsync<List<string>>(url);
             return response ?? [];
-        }        
+        }
     }
 }

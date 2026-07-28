@@ -10,15 +10,13 @@ namespace LolTeamTracker.Api.Controllers
     public class RiotController : ControllerBase
     {
         private readonly IRiotApiClient _riotApiClient;
-        private readonly RiotDataDownloader _riotApiClientDataDownloader;
+        private readonly StaticDataService _staticDataService;
         private readonly ILogger<RiotController> _logger;
 
-
-
-        public RiotController(IRiotApiClient riotApiClient, RiotDataDownloader riotDataDownloader,ILogger<RiotController> logger )
+        public RiotController(IRiotApiClient riotApiClient, StaticDataService staticDataService, ILogger<RiotController> logger )
         {
             _riotApiClient = riotApiClient;
-            _riotApiClientDataDownloader = riotDataDownloader;
+            _staticDataService = staticDataService;
             _logger = logger;
         }
 
@@ -81,39 +79,11 @@ namespace LolTeamTracker.Api.Controllers
         /// 下載所有最新的json資料
         /// </summary>
         [HttpPost("download-all-json")]
-        public async Task<IActionResult> DownloadChampionData()
+        public async Task<IActionResult> DownloadDataAsync() 
         {
-            var resultList = new List<string>();
-
-            #region Old : 若失敗就只回傳單一成功與失敗
-            //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestChampionJsonAsync());
-            //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestItemJsonAsync());
-            //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestSummonerJsonAsync());
-            //resultList.Add(await _riotApiClientDataDownloader.DownloadLatestRunesReforgedJsonAsync());
-            #endregion
-
-            #region 進階 : 先下載並返回成功與失敗的結果
-            async Task TryDownload(Func<Task<string>> downloadFunc, string fileName)
-            {
-                try
-                {
-                    var result = await downloadFunc();
-                    resultList.Add($"{fileName}: ✅ {result}");
-                }
-                catch (Exception ex)
-                {
-                    resultList.Add($"{fileName}: ❌ 錯誤 - {ex.Message}");
-                    _logger.LogError(ex,"fileName:{fileName}",fileName);
-
-                }
-            }
-
-            await TryDownload(_riotApiClientDataDownloader.DownloadLatestChampionJsonAsync, "Champion");
-            await TryDownload(_riotApiClientDataDownloader.DownloadLatestItemJsonAsync, "Item");
-            await TryDownload(_riotApiClientDataDownloader.DownloadLatestSummonerJsonAsync, "Summoner");
-            await TryDownload(_riotApiClientDataDownloader.DownloadLatestRunesReforgedJsonAsync, "Runes");
-            #endregion
-
+            // 進階 : 先下載並返回成功與失敗的結果
+            var resultList = await _staticDataService.DownloadAllDataFilesAsync();
+            
             return Ok(new
             {
                 message = "所有檔案處理完畢",

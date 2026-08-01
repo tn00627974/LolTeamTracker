@@ -17,20 +17,21 @@
         {
             var client = _httpClientFactory.CreateClient();
             var versionList = await client.GetFromJsonAsync<List<string>>("https://ddragon.leagueoflegends.com/api/versions.json");
-            return versionList!.First();// 取得最新版本(不會有 null)
+            var latestVersion = versionList!.First(); // 取得最新版本(不會有 null)
+            return latestVersion;
         }
 
         /// <summary>
         /// 查詢檔案內容
         /// </summary>
-        /// <param name="latestVersion">版本號</param>
+        /// <param name="version">版本號</param>
         /// <param name="fileName">檔案名稱</param>
         /// <param name="lang">地區格式</param>
         /// <returns></returns>
-        public async Task<string> GetDataFileAsync(string latestVersion, string fileName, string lang)
+        public async Task<string> GetDataFileAsync(string version, string fileName, string lang)
         {
             var client = _httpClientFactory.CreateClient();
-            var url = $"https://ddragon.leagueoflegends.com/cdn/{latestVersion}/data/{lang}/{fileName}";
+            var url = $"https://ddragon.leagueoflegends.com/cdn/{version}/data/{lang}/{fileName}";
 
             var response = await client.GetAsync(url);
             response.EnsureSuccessStatusCode();

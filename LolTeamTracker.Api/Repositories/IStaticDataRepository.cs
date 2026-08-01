@@ -2,6 +2,6 @@
 {
     public interface IStaticDataRepository
     {
-        public Task SaveDataFileAsync(string latestVersion, string fileName, string content);
+        Task SaveDataFileAsync(string fileName, string content);
     }
 }

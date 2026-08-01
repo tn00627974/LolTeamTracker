@@ -9,7 +9,7 @@
             _env = env;
         }
 
-        public async Task SaveDataFileAsync(string latestVersion, string fileName, string content)
+        public async Task SaveDataFileAsync(string fileName, string content)
         {
             string savePath = Path.Combine(_env.ContentRootPath, "Data", "Static", fileName);
             Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);

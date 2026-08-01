@@ -19,17 +19,17 @@ namespace LolTeamTracker.Api.Services
         }
 
         /// <summary>
-        /// 下載所有json的資料 => 放在 Data\\Static 資料夾
+        /// 下載Json的資料 => 放在 Data\\Static 資料夾
         /// </summary>
-        /// <param name="latestVersion">版本號</param>
+        /// <param name="version">版本號</param>
         /// <param name="fileName">檔案名稱</param>
         /// <returns></returns>
-        public async Task<string> DownloadDataFileAsync(string latestVersion, string fileName)
+        public async Task<string> DownloadDataFileAsync(string version, string fileName)
         {
-            var content = await _dataDragonClient.GetDataFileAsync(latestVersion ,fileName);
-            await _staticDataRepository.SaveDataFileAsync(latestVersion, fileName, content);
+            var content = await _dataDragonClient.GetDataFileAsync(version, fileName);
+            await _staticDataRepository.SaveDataFileAsync(fileName, content);
             string now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-            return $"{now}:{fileName}下載版本{latestVersion}成功!";
+            return $"{now}:{fileName}下載版本{version}成功!";
         }
 
         /// <summary>

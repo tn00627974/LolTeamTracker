@@ -10,7 +10,6 @@ public class MatchController : ControllerBase
 {
     private readonly IMatchAnalyzer _matchAnalyzer;
 
-
     public MatchController (IMatchAnalyzer matchAnalyzer)
     {
         _matchAnalyzer = matchAnalyzer;

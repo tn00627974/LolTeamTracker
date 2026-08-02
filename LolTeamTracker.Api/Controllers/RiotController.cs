@@ -11,13 +11,11 @@ namespace LolTeamTracker.Api.Controllers
     {
         private readonly IRiotApiClient _riotApiClient;
         private readonly StaticDataService _staticDataService;
-        private readonly ILogger<RiotController> _logger;
 
-        public RiotController(IRiotApiClient riotApiClient, StaticDataService staticDataService, ILogger<RiotController> logger )
+        public RiotController(IRiotApiClient riotApiClient, StaticDataService staticDataService )
         {
             _riotApiClient = riotApiClient;
             _staticDataService = staticDataService;
-            _logger = logger;
         }
 
         /// <summary>
@@ -82,13 +80,21 @@ namespace LolTeamTracker.Api.Controllers
         public async Task<IActionResult> DownloadDataAsync() 
         {
             // 進階 : 先下載並返回成功與失敗的結果
-            var resultList = await _staticDataService.DownloadAllDataFilesAsync();
-            
-            return Ok(new
+            var results = await _staticDataService.DownloadAllDataFilesAsync();
+
+            // 全部檔案都成功
+            if (results.FailedCount == 0)
             {
-                message = "所有檔案處理完畢",
-                results = resultList
-            });
+                return Ok(results);
+            }
+
+            // 全部檔案沒有下載成功
+            if (results.SuccessCount == 0)
+            {
+                return StatusCode(502, results); // 全部失敗，上游（Data Dragon）出問題
+            }
+
+            return StatusCode(207, results);
         }
     }
 }

@@ -8,7 +8,7 @@ namespace LolTeamTracker.Api.Clients
         private readonly HttpClient _matchClient;
         
 
-        public RiotApiClient(IHttpClientFactory httpFactory, Guid NewGuid)
+        public RiotApiClient(IHttpClientFactory httpFactory)
         {
             _accountClient = httpFactory.CreateClient("Account");
             _matchClient = httpFactory.CreateClient("Match");

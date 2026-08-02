@@ -1,4 +1,5 @@
 ﻿using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Models.Results;
 using LolTeamTracker.Api.Repositories;
 
 namespace LolTeamTracker.Api.Services
@@ -10,12 +11,14 @@ namespace LolTeamTracker.Api.Services
     {
         private readonly IDataDragonClient _dataDragonClient;
         private readonly IStaticDataRepository _staticDataRepository;
+        private readonly ILogger<StaticDataService> _logger;
 
 
-        public StaticDataService(IDataDragonClient dataDragonClient, IStaticDataRepository staticDataRepository) 
+        public StaticDataService(IDataDragonClient dataDragonClient, IStaticDataRepository staticDataRepository, ILogger<StaticDataService> logger) 
         {
             _dataDragonClient = dataDragonClient;
             _staticDataRepository = staticDataRepository;
+            _logger = logger;
         }
 
         /// <summary>
@@ -24,21 +27,39 @@ namespace LolTeamTracker.Api.Services
         /// <param name="version">版本號</param>
         /// <param name="fileName">檔案名稱</param>
         /// <returns></returns>
-        public async Task<string> DownloadDataFileAsync(string version, string fileName)
+        public async Task<DownloadAllResult> DownloadDataFileAsync(string version, string fileName)
         {
-            var content = await _dataDragonClient.GetDataFileAsync(version, fileName);
-            await _staticDataRepository.SaveDataFileAsync(fileName, content);
             string now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-            return $"{now}:{fileName}下載版本{version}成功!";
+            var results = new DownloadAllResult();
+
+            try
+            {
+                var content = await _dataDragonClient.GetDataFileAsync(version, fileName);
+                await _staticDataRepository.SaveDataFileAsync(fileName, content);
+                results.SuccessCount++;
+            }
+            catch (Exception ex)
+            {
+                if (ex is HttpRequestException httpEx)
+                {
+                    _logger.LogError(httpEx, "下載 {FileName} 失敗，第三方回應狀態碼 {StatusCode}", fileName, httpEx.StatusCode);
+                }
+                else
+                {
+                    _logger.LogError(ex, "{FileName}發生錯誤", fileName);
+                }
+                results.FailedCount++;
+            }
+            return results; 
         }
 
         /// <summary>
-        /// 
+        /// 下載Json的資料 => 放在 Data\\Static 資料夾
         /// </summary>
         /// <returns></returns>
-        public async Task<List<string>> DownloadAllDataFilesAsync()
+        public async Task<DownloadAllResult> DownloadAllDataFilesAsync()
         {
-            var resultList = new List<string>();
+            var results = new DownloadAllResult();
             var latestVersion = await _dataDragonClient.GetLatestVersionAsync();
 
             await FetchDataFileAsync("champion.json");
@@ -46,20 +67,22 @@ namespace LolTeamTracker.Api.Services
             await FetchDataFileAsync("summoner.json");
             await FetchDataFileAsync("runesReforged.json");
 
+            return results;
+
             async Task FetchDataFileAsync(string fileName)
             {
-                try
+                var downloadResult = await DownloadDataFileAsync(latestVersion, fileName);
+                if (downloadResult.SuccessCount > 0)
                 {
-                    var result = await DownloadDataFileAsync(latestVersion, fileName);
-                    resultList.Add($"✅ {result}");
+                    results.SuccessCount++;
+                    results.SuccessFiles.Add(fileName);
                 }
-                catch (Exception ex)
+                else
                 {
-                    resultList.Add($"❌{ex.Message}");
+                    results.FailedCount++;
+                    results.FailedFiles.Add(fileName);
                 }
             }
-
-            return resultList;
         }
     }
 }

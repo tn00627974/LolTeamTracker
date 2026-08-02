@@ -32,11 +32,11 @@
         {
             var client = _httpClientFactory.CreateClient();
             var url = $"https://ddragon.leagueoflegends.com/cdn/{version}/data/{lang}/{fileName}";
-
             var response = await client.GetAsync(url);
+
             response.EnsureSuccessStatusCode();
             var content = await response.Content.ReadAsStringAsync();
-            return content;
+            return content;     
         }
     }
 }

@@ -6,11 +6,11 @@ namespace LolTeamTracker.Api.Middleware
 {
     public class GlobalExceptionHandler : IExceptionHandler
     {
-        private readonly ILogger<GlobalExceptionHandler> logger;
+        private readonly ILogger<GlobalExceptionHandler> _logger;
 
         public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
         {
-            this.logger = logger;
+            this._logger = logger;
         }
 
         public async ValueTask<bool> TryHandleAsync(
@@ -70,7 +70,7 @@ namespace LolTeamTracker.Api.Middleware
                 Extensions = new Dictionary<string, object?> {{ "traceId", traceId }}
             };
 
-            logger.LogError(exception, "Unhandled exception occurred. TraceId: {TraceId}, Title: {Title}, Status: {Status}, Detail: {Detail}",
+            _logger.LogError(exception, "Unhandled exception occurred. TraceId: {TraceId}, Title: {Title}, Status: {Status}, Detail: {Detail}",
     traceId, problemDetails.Title, problemDetails.Status, problemDetails.Detail);
 
 

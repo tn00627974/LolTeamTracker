@@ -17,10 +17,10 @@
         {
             var client = _httpClientFactory.CreateClient();
             var versionList = await client.GetFromJsonAsync<List<string>>("https://ddragon.leagueoflegends.com/api/versions.json");
-            var latestVersion = versionList!.First(); // 取得最新版本(不會有 null)
+            var latestVersion = versionList?.FirstOrDefault() ?? throw new InvalidOperationException("版本為空");
             return latestVersion;
         }
-
+        
         /// <summary>
         /// 查詢檔案內容
         /// </summary>

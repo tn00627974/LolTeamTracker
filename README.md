@@ -1,314 +1,277 @@
-# ✅ 1. 申請 Riot 開發者 API Key
+# LolTeamTracker
 
-1. 註冊 Riot 帳號並前往 Riot 開發者平台  https://developer.riotgames.com/
-2. 申請開發者 Key（**開發用 Key 有效 24 小時**，正式環境需審核）
-	-  API KEY : [[Ulysses/GitHub專案/RiotServer/Riot API Key|你申請的API KEY]]
-3. 取得你的 `X-Riot-Token`，後續 API 都要用這個做身份驗證
+> 串接 Riot Games API 的英雄聯盟戰隊戰績分析後端服務，以 ASP.NET Core 8 實作。
 
-📌 Step 1. 用 Riot ID 查 puuid
-Simple :
-```
-GET 
-https://asia.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}
-Header:
-X-Riot-Token: <你的 API Key>
-```
-- {gameName} : `真實遊戲ID`
-- {tagLine} : `#tw2`
+這個專案的目的不只是「把資料撈出來」，而是拿一個會**實際失敗的外部依賴**（Riot API 有速率限制、24 小時就過期的開發金鑰、會回 404 的查詢），練習後端該有的邊界處理：錯誤怎麼分類、日誌怎麼查、職責怎麼切。
 
-✅GET 
+---
+
+## 目錄
+
+- [系統架構](#系統架構)
+- [技術棧](#技術棧)
+- [快速開始](#快速開始)
+- [API 端點](#api-端點)
+- [設計決策與 trade-off](#設計決策與-trade-off)
+- [目前狀態與 Roadmap](#目前狀態與-roadmap)
+
+---
+
+## 系統架構
+
+單一 Web API 專案，以資料夾分層。**依賴方向單向由上而下，且一律依賴介面而非實作。**
+
+```mermaid
+flowchart TD
+    Client[HTTP Client / Swagger]
+
+    subgraph API["LolTeamTracker.Api"]
+        direction TB
+        C["Controllers/<br/>只處理 HTTP：參數綁定、狀態碼、回傳"]
+        S["Services/<br/>只做「算」：業務邏輯、資料轉換"]
+        CL["Clients/<br/>只跟外部 API 溝通"]
+        R["Repositories/<br/>只管資料存取"]
+    end
+
+    Riot[(Riot Games API)]
+    DDragon[(Data Dragon CDN)]
+    Files[(team.json / Static JSON)]
+
+    Client --> C
+    C --> S
+    C --> CL
+    S --> CL
+    S --> R
+    CL --> Riot
+    CL --> DDragon
+    R --> Files
 ```
-https://asia.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{你的id}/TW2
+
+| 資料夾 | 職責 | 不做什麼 |
+|---|---|---|
+| `Controllers/` | 收參數、呼叫下一層、決定狀態碼 | 不寫商業邏輯 |
+| `Clients/` | 呼叫 Riot API / Data Dragon CDN | 不做業務判斷 |
+| `Services/` | 計算 KDA、CS、時區轉換、流程編排 | 不自己開 `HttpClient`、不自己讀檔 |
+| `Repositories/` | 資料放哪裡、怎麼存取 | 不含業務邏輯 |
+| `Models/` | DTO / Domain Model / Request Model | 不含邏輯 |
+| `Validators/` | FluentValidation 規則 | — |
+| `Middleware/` | 全域例外處理 | — |
+| `Filters/` | 驗證結果統一攔截 | — |
+
+**判斷職責有沒有混在一起的速查測試：** 如果一個類別的建構子同時出現 `IHttpClientFactory`（打外部 API）和 `IWebHostEnvironment`（存取檔案），代表它同時扛了兩種性質完全不同的事，就該拆。這個專案有兩個類別是照這條規則拆出來的（見下方設計決策 #1）。
+
+---
+
+## 技術棧
+
+| 項目 | 選用 |
+|---|---|
+| Runtime | .NET 8 / ASP.NET Core Web API |
+| 參數驗證 | FluentValidation 12 + 自訂 `ValidationFilter` |
+| 錯誤處理 | `IExceptionHandler` + RFC 7807 `ProblemDetails` |
+| 日誌 | `Microsoft.Extensions.Logging`，`AddJsonConsole()` 輸出結構化 JSON |
+| API 文件 | Swashbuckle（Swagger UI + ReDoc）+ XML 註解 |
+| 外部資料 | Riot Games API、Data Dragon CDN |
+| 資料儲存 | JSON 檔案（**規劃中**：EF Core + MSSQL） |
+
+---
+
+## 快速開始
+
+### 前置需求
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- 一組 Riot API Key（[開發者平台](https://developer.riotgames.com/) 申請，**開發用金鑰 24 小時失效**）
+
+### 設定
+
+API Key **不進版控**。`appsettings.json` 中的 `RiotApi:ApiKey` 一律留空，實際金鑰放在下列任一處：
+
+```bash
+# 方式一：User Secrets（推薦，本機開發）
+cd LolTeamTracker.Api
+dotnet user-secrets init
+dotnet user-secrets set "RiotApi:ApiKey" "RGAPI-你的金鑰"
+
+# 方式二：環境變數
+export RiotApi__ApiKey="RGAPI-你的金鑰"   # Linux / macOS
+$env:RiotApi__ApiKey="RGAPI-你的金鑰"     # Windows PowerShell
 ```
+
+`appsettings.Development.json` 已列入 `.gitignore`。
+
+### 啟動
+
+```bash
+dotnet restore
+dotnet run --project LolTeamTracker.Api
+```
+
+啟動後開啟：
+
+- Swagger UI — `https://localhost:{port}/swagger`
+- ReDoc — `https://localhost:{port}/redoc`
+
+### 戰隊名單設定
+
+團隊查詢功能讀取 `LolTeamTracker.Api/Data/Team/team.json`：
+
+```json
+[
+  { "gameName": "玩家名稱", "tagLine": "TW2" }
+]
+```
+
+---
+
+## API 端點
+
+### `MatchController` — 戰績分析（本服務的核心價值）
+
+| Method | 路徑 | 說明 |
+|---|---|---|
+| `GET` | `/api/match/match-summaries?gameName={name}&tagLine={tag}&count={n}` | 查單一玩家近期戰績，回傳整理後的 KDA、CS、分路、遊戲模式、台灣時間 |
+| `GET` | `/api/match/team-analysis` | 讀取戰隊名單，批次查詢全隊戰績 |
+
+### `RiotController` — Riot API 代理與靜態資料
+
+| Method | 路徑 | 說明 |
+|---|---|---|
+| `GET` | `/api/riot/players/{gameName}/{tagLine}` | Riot ID → puuid |
+| `GET` | `/api/riot/players/{puuid}` | puuid → Riot ID |
+| `GET` | `/api/riot/players/match-ids?puuid={puuid}&count={n}` | 查對戰編號列表 |
+| `GET` | `/api/riot/matches/{matchId}` | 單場原始資料 |
+| `GET` | `/api/riot/matches/{matchId}/timeline` | 單場時間軸 |
+| `POST` | `/api/riot/download-all-json` | 從 Data Dragon 下載最新靜態資料（英雄、道具、符文、召喚師技能） |
+
+### 錯誤回應格式
+
+所有例外統一由 `GlobalExceptionHandler` 轉成 RFC 7807 `ProblemDetails`，並附帶 `traceId` 供日誌關聯：
 
 ```json
 {
-    "puuid": "bemk1rOXSFHkuJO2M8c6WjzGo0YL-g-BdtAMk6FdbjKho3-j69Y8rVYYPM1BJuUrpYZn-puUMwBPkQ",
-    "gameName": "深邃紅月",
-    "tagLine": "tw2"
+  "type": "about:blank",
+  "title": "Player not found",
+  "status": 404,
+  "detail": "找不到玩家，請確認輸入的名稱與 TagLine 是否正確",
+  "instance": "/api/match/match-summaries",
+  "traceId": "00-8a3f...-01"
 }
 ```
 
-📌 Step 2. 用 puuid 查比賽列表 
-GET ✅要將asia.api.riotgames.com 更換成 **sea**.api.riotgames.com 
-```
-https://sea.api.riotgames.com/lol/match/v5/matches/by-puuid/{{puuid}}}/ids?start=0&count=10
-```
-
-![[Ulysses/成長筆記本/資料工程師/附件圖片檔/Pasted image 20250705215341.png]]
-![[Ulysses/成長筆記本/資料工程師/附件圖片檔/Pasted image 20250705223330.png]]
-![[Ulysses/成長筆記本/資料工程師/附件圖片檔/Pasted image 20250706200007.png]]
-
-
-| 地區/伺服器   | Routing Region（用於 Match API） |
-| -------- | ---------------------------- |
-| 台灣、香港、越南 | **sea**（Southeast Asia）      |
-| 韓國       | **asia**                     |
-| 日本       | **asia**                     |
-| 歐洲       | **europe**                   |
-| 北美       | **americas**                 |
-
-📌 Step 3. 用 puuid 查比賽列表細節
-
-Simple :
-```
-https://sea.api.riotgames.com/lol/match/v5/matches/{matchId}
-```
-- {matchId} : `遊戲對戰編號`
-
-✅GET
-```
-https://sea.api.riotgames.com/lol/match/v5/matches/TW2_316231903
-```
-
-
 ---
 
-# 📦 Riot 官方版本查詢（找出當前版本）
+## 設計決策與 trade-off
 
-GET
-```
-https://ddragon.leagueoflegends.com/api/versions.json
-```
+這一節記錄的是**為什麼這樣做，以及放棄了什麼**。
 
-# 📦 Riot 資料 JSON
+### 1. 拆解 God-Class：一個類別只做一種性質的事
 
-https://ddragon.leagueoflegends.com/cdn/15.13.1/data/zh_TW/champion.json
-https://ddragon.leagueoflegends.com/cdn/15.13.1/data/zh_TW/summoner.json
-https://ddragon.leagueoflegends.com/cdn/15.13.1/data/zh_TW/item.json
+**問題：** `MatchAnalyzer` 原本同時做三件事——用 `HttpClient` 打 Riot API、計算 KDA/CS/時區、讀取 `team.json`。建構子同時出現 `IHttpClientFactory` 和檔案路徑，是職責混雜的明確訊號。
 
-從 Riot Match API 中取得的每場資料裡，這些都可以用 Riot 提供的 JSON 靜態資料對應：
-- `championName`: 英雄英文名稱（直接拼在 `.../champion/{name}.png`）    
-- `summoner1Id` / `summoner2Id`: 對應 spell ID，你要用 spell.json 查名稱    
-- `item0` ~ `item6`: 直接就是 item 的整數 ID    
-- `perks`: 符文需用 perks.json 解析
+**做法：** 打 API 的責任移到 `IRiotApiClient`，讀檔的責任移到 `ITeamRepository`，`MatchAnalyzer` 只剩「算」。
 
-|你想顯示的內容|資料來源|圖片位置|
+同樣的判斷套用在 `RiotDataDownloader` 上，拆成三層：
+
+| 拆出的類別 | 職責 |
+|---|---|
+| `DataDragonClient` | 只跟 CDN 要資料，回傳原始內容 |
+| `StaticDataRepository` | 只負責檔案落地 |
+| `StaticDataService` | 只做流程編排，依賴上述兩個介面 |
+
+**順帶修掉的效能問題：** 原本下載四個檔案時，版本號被查了四次（總計 8 次 HTTP 請求），且用 `static string? _version` 共用可變狀態。改成整輪查一次後往下傳，HTTP 請求 **8 → 5 次**，並保證四個檔案的版本一致。
+
+**trade-off：** 類別數量從 1 個變成 3 個，跳轉檔案的成本增加。在這個規模下是划算的——因為換掉任一層的實作（例如檔案改資料庫）不會波及其他層。但如果這是個只有兩百行、永遠不會換實作的工具程式，這樣拆就是過度設計。
+
+**沒有做的選擇：** 沒有拆成 Clean Architecture 那種多專案結構。單一專案用資料夾分層，在目前規模下已經足夠表達分層意圖，多專案只會增加建置與跳轉成本。
+
+### 2. 錯誤不當作資料回傳
+
+**問題：** `download-all-json` 端點原本不管成功失敗一律回 `200 OK`，把 `ex.Message` 拼成 `"❌ 錯誤 - ..."` 字串塞進結果陣列。呼叫端必須**字串比對 emoji** 才知道有沒有失敗。
+
+**做法：** 依實際結果分流狀態碼，並回傳結構化 DTO（`DownloadAllResult`）：
+
+| 情況 | 狀態碼 | 理由 |
 |---|---|---|
-|英雄頭像|Match API 中的 `championName`|`/img/champion/{name}.png`|
-|技能圖示|`summoner1Id` / `summoner2Id`|`/img/spell/{spellName}.png`（需轉換）|
-|道具圖示|`item0 ~ item6`|`/img/item/{itemId}.png`|
-|符文圖示|`perks` 欄位解析後對應|`/img/perk-images/...`|
+| 全部成功 | `200 OK` | — |
+| 部分成功 | `207 Multi-Status` | 呼叫端可從 `FailedFiles` 得知哪幾個失敗 |
+| 全部失敗 | `502 Bad Gateway` | 上游 CDN 出問題，不是本服務的 bug——用 500 會誤導維運方向 |
 
-## 🛠️ 使用 Postman 直接撈取最新版本號 
+**原則：** Service 層失敗一律拋例外，不 `return null` 也不回錯誤字串。錯誤混進正常回傳值，呼叫端遲早會忘記檢查。
 
-### 步驟如下：
+### 3. 全域例外處理：對外給安全訊息，對內留完整脈絡
 
-### 🔹 1. 建立第一個請求：取得版本清單
+`GlobalExceptionHandler` 實作 `IExceptionHandler`，依外部 API 的實際回應分流：
 
-- 方法：`GET`
-- URL：`https://ddragon.leagueoflegends.com/api/versions.json
-
-### 🔹 2. 在此請求中加入 Pre-request Script（如下）
-
-```javascript
-// 這段程式碼放在 Pre-request Script 中會在請求前執行
-pm.sendRequest("https://ddragon.leagueoflegends.com/api/versions.json", function (err, res) {
-    if (!err) {
-        const versionsArray = res.json();      // 把 response 轉成陣列
-        const latestVersion = versionsArray[0]; // 取得最新版本
-        pm.environment.set("versions", latestVersion); // 設定成環境變數
-        console.log("最新版本為:", latestVersion);
-    } else {
-        console.error("錯誤取得版本:", err);
-    }
-});
-```
-
-### 🔹 3. 建立後續請求（使用該版本）
-
-- 方法：`GET`
-- URL：
-    
-```
-`https://ddragon.leagueoflegends.com/cdn/{{versions}}/data/zh_TW/champion.json`
-```
-
-其他請求依樣畫葫蘆，把 `{{versions}}` 當作 URL 的一部分使用即可。
-
-### 🔹4. 其餘 JSON API : 套入環境變數 {{versions}}
-
-```javascript
-https://ddragon.leagueoflegends.com/cdn/{{versions}}/data/zh_TW/champion.json
-https://ddragon.leagueoflegends.com/cdn/{{versions}}/data/zh_TW/summoner.json
-https://ddragon.leagueoflegends.com/cdn/{{versions}}/data/zh_TW/item.json
-```
-
-## 📌 備註：
-
-- 你要先執行一次「版本取得」的 request，這樣 `versions` 變數才會被設定。    
-- 請確認使用的是 **Environment Variables**（環境變數），而不是 Global 或 Collection 變數。    
-- 你也可以改成用 `Collection Pre-request Script`，讓其他請求都共用。
-
----
-## ✅ 開發總目標
-
-打造一個簡易網頁平台，能自動查詢你朋友（6～10人）的戰績，並整合在一個畫面上查看。
-
----
-
-## ✅ TODO LIST + 教學分解
-
-### 🟧 第 1 階段：基礎資料準備與設計
-
-| 步驟  | 項目                                         | 教學說明                                                                             |
-| --- | ------------------------------------------ | -------------------------------------------------------------------------------- |
-| ✅ 1 | 收集所有團員的 `gameName + tagLine` → 轉換為 `puuid` | 使用 Riot API `/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}`          |
-| ✅ 2 | 建立 puuid 名單（JSON）                          | 可放在本地 JSON 檔或資料庫，格式如下：`[{ "name": "深邃紅月", "tag": "tw2", "puuid": "xxxx" }, ...]` |
-| ✅ 3 | 申請 Riot 開發者 API 金鑰                         | [https://developer.riotgames.com/](https://developer.riotgames.com/)每日更新一次 Key   |
-|     |                                            |                                                                                  |
-
----
-
-### 🟨 第 2 階段：後端 API 建構（C# ASP.NET 建議）
-
-| 步驟   | 項目                                                  | 教學說明                                                        |
-| ---- | --------------------------------------------------- | ----------------------------------------------------------- |
-| 🔧 4 | 建立 ASP.NET Web API 專案（.NET 8）                       | 建議使用 `dotnet new webapi` 或 Visual Studio 建立                 |
-| 🔧 5 | 建立服務 `RiotApiService`，封裝 Riot API 呼叫邏輯              | 3 層邏輯：① 查 puuid → matchIds② 查 matchId → match info③ 過濾出自己戰績 |
-| 🔧 6 | 建立 Controller `/api/match/{puuid}` → 回傳該玩家最近 10 場資料 | 使用 `HttpClient` 進行請求，格式化回傳 JSON                             |
-| 🔧 7 | 建立一個 `/api/team` API → 迴圈查詢所有團員資料                   | 可以並行查詢 6～10 個 puuid 的比賽結果                                   |
-
----
-
-### 🟩 第 3 階段：快取與排程（選用）
-
-| 步驟   | 項目                                     | 教學說明                          |
-| ---- | -------------------------------------- | ----------------------------- |
-| ⏱️ 8 | 將查詢結果快取至記憶體 / Redis / JSON 檔案          | 避免過度打 Riot API，可 15~30 分鐘更新一次 |
-| ⏱️ 9 | 加入自動更新排程（BackgroundService 或 Hangfire） | 定時更新所有 puuid 的比賽資料            |
-
----
-
-### 🟦 第 4 階段：前端資料展示
-
-|步驟|項目|教學說明|
+| Riot 回應 | 本服務回應 | 理由 |
 |---|---|---|
-|💻 10|建立簡單網頁頁面（用 ASP.NET MVC、Razor Pages 或 React）|顯示每位玩家卡片，內含最近 10 場對戰紀錄|
-|💻 11|呼叫 `/api/team` API 並用 JavaScript 顯示資料|用 fetch() 抓資料，渲染列表|
-|💻 12|美化介面（建議用 Tailwind CSS）|可加入卡片、英雄頭像、勝敗配色、KDA 字體強調等樣式|
+| `404` | `404` + 「找不到玩家」 | 使用者輸入問題，訊息要能指引修正 |
+| `429` | `429` + 「查詢過快」 | 速率限制，可重試 |
+| `401` / `403` | **`500`** + 「系統發生未預期的錯誤」 | **金鑰過期是我方的系統問題**，不該讓呼叫端以為是自己沒權限，也不該洩漏內部狀態 |
+
+`401 → 500` 這個轉換是刻意的：**上游的狀態碼語意，不等於本服務對呼叫端的語意。**
+
+### 4. 驗證責任從 Controller 抽離
+
+Controller 曾經散落 `if (string.IsNullOrEmpty(...))` 這類檢查。現在：
+
+- 參數收斂成 Request Model（`GetMatchListRequest` 等），用 `[FromQuery]` / `[FromRoute]` 綁定
+- 規則寫在 `Validators/`，共用零件放 `RuleBuilderExtensions`
+- `ValidationFilter` 註冊為全域 filter，在 action 執行**之前**統一攔截
+
+Controller 因此只剩「呼叫下一層、回傳結果」。
+
+### 5. 結構化日誌，不用字串內插
+
+```csharp
+// 不這樣寫——訊息變成一整串，無法依欄位查詢
+_logger.LogError($"查詢比賽失敗 {gameName}#{tagLine}");
+
+// 這樣寫——GameName、TagLine、MatchId 是可查詢的獨立欄位
+_logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId: {MatchId}",
+    gameName, tagLine, matchId);
+```
+
+`TraceId` 統一採 `Activity.Current?.Id ?? httpContext.TraceIdentifier`，讓錯誤回應中的 `traceId` 能直接對回日誌。`Program.cs` 加上 `AddJsonConsole()` 以驗證欄位確實有結構化，而非只是看起來像。
 
 ---
 
-### 🟪 第 5 階段：部署與優化（可選）
+## 目前狀態與 Roadmap
 
-| 步驟    | 項目                     | 教學說明                                    |
-| ----- | ---------------------- | --------------------------------------- |
-| 🚀 13 | 本地測試無誤後，部署到 VPS / 雲端   | 可用 Windows Server + IIS、或 Azure Web App |
-| 🔐 14 | 加入錯誤處理與 API 過載保護       | 若有速率限制，需加入 retry、封鎖機制等                  |
-| 📈 15 | 可加上資料分析（例如每人勝率、MVP場次等） | 額外統計功能：勝場率、平均 KDA、最常玩英雄等                |
+誠實記錄目前的限制，以及打算怎麼處理。
 
----
-
-## 🛠️ 最小可執行版本（MVP）
-
-你只需要完成前面 7 步，就能完成「團隊戰績總表」的基礎功能 ✅
-
----
-
-## 📦 我可以提供的資源（你只要指定）
-
-1. ✅ C# ASP.NET Web API 專案模板（含 Riot 封裝服務）    
-2. ✅ JavaScript / Razor 前端頁面 + Tailwind 樣式    
-3. ✅ Riot API 呼叫工具類別（含 PUUID/Match 封裝）    
-4. ✅ Redis 快取與排程更新範例（選用）    
-5. ✅ 完整部署教學流程（若需公開上網）
-    
----
-
-你想從哪一階段開始呢？  
-我可以幫你從「建構後端 API」或「前端樣板」先做一個開始版本 🔧
-
-
----
-
-要開發一個像 OP.GG 這樣的遊戲數據分析平台，你可以把學習與開發分成以下幾大模組來規劃，以下是詳細的 **開發學習路線圖**，適合你這樣已有 C# 與資料工程背景的工程師：
-
-### 🔧 一、系統架構規劃階段
-
-**目標：理解 OP.GG 的系統組成與流量結構**
-
-| 模組     | 內容說明                                                            |
-| ------ | --------------------------------------------------------------- |
-| 功能模擬   | 遊戲資料查詢、排行榜、使用者分析、API匯入、帳號系統、UI互動與圖表                             |
-| 架構設計   | 分層架構（前端、後端、資料庫、API、爬蟲/匯入系統）                                     |
-| 架構選擇   | 單頁式應用 SPA（React/Vue）或 ASP.NET MVC、.NET Web API、Redis 快取層、CDN 前置 |
-| 資料來源分析 | 官方 API（如 Riot Games API）、非公開資料（爬蟲或第三方匯入）                        |
-
----
-
-### 🌐 二、前端開發技能
-
-|項目|技術學習|推薦資源|
+| 項目 | 狀態 | 說明 |
 |---|---|---|
-|網頁框架|React（或 Next.js）/ Vue|[React 官方教學](https://chatgpt.com/c/f)、[Vue Mastery](https://chatgpt.com/c/f)|
-|圖表呈現|Chart.js / Recharts / ECharts|[Recharts 文檔](https://chatgpt.com/c/f)|
-|UI 設計|Tailwind CSS / Shadcn UI / Bootstrap|[Tailwind Cheat Sheet](https://chatgpt.com/c/f)|
-|SEO / SSR|Next.js / Nuxt.js|[Next.js 教學](https://chatgpt.com/c/f)|
+| 分層架構 + 介面隔離 | ✅ 完成 | |
+| 全域例外處理 | ✅ 完成 | |
+| FluentValidation | ✅ 完成 | |
+| 結構化日誌 | ✅ 完成 | |
+| **強型別 DTO** | 🔜 規劃中 | 目前 Riot 回應以 `JsonElement` 傳遞，`GetProperty("x")` 散落在 Service 層。改成 DTO 後，欄位缺漏會在反序列化邊界就失敗，而不是在邏輯深處才 runtime 爆炸 |
+| **EF Core + MSSQL** | 🔜 規劃中 | `team.json` 搬進資料庫。因為已經抽出 `ITeamRepository`，預期改動只會落在 `Repositories/` 這一層 |
+| **單元測試** | 🔜 規劃中 | 介面已就緒，可用測試替身隔離外部 API |
+| 快取（Cache-Aside） | 🔜 規劃中 | Riot API 有速率限制，重複查詢應快取 |
+| Docker | 🔜 規劃中 | |
+
+### 已知限制
+
+- **Riot 開發用 API Key 24 小時失效**，過期後所有查詢會失敗（本服務會回 `500`，日誌中可見上游的 `401`）
+- 團隊查詢採序列呼叫，隊員數量多時延遲會線性累加，尚未平行化或加上速率限制保護
+- 尚未導入重試 / 熔斷機制（Polly），遇到 Riot API 暫時性失敗不會自動重試
 
 ---
 
-### 🧠 三、後端開發技能（C# or Node.js）
+## 專案結構
 
-| 項目       | 技術學習                                     | 推薦資源                                   |
-| -------- | ---------------------------------------- | -------------------------------------- |
-| API 架設   | ASP.NET Core Web API / Node.js + Express | [官方教學](https://chatgpt.com/c/f)        |
-| 快取設計     | Redis（用來避免過度查詢 API）                      | [Redis 速成教學](https://chatgpt.com/c/f)  |
-| JWT 登入系統 | ASP.NET Identity / Firebase Auth         | [JWT 教學](https://chatgpt.com/c/f)      |
-| 排程任務     | Hangfire / Quartz.NET / Node-cron        | [Hangfire 教學](https://chatgpt.com/c/f) |
-
----
-
-### 🗃️ 四、資料與爬蟲系統（資料來源處理）
-
-|    項目     |                       技術學習                       |       備註        | 執行  |                                           限制                                            |
-| :-------: | :----------------------------------------------: | :-------------: | :-: | :-------------------------------------------------------------------------------------: |
-| 官方 API 串接 |             Riot Games API（需申請 Key）              |    有限速，注意快取     |  ✅  | #### Rate Limits<br>20 requests every 1 seconds(s)  <br>100 requests every 2 minutes(s) |
-| Python 爬蟲 | Requests + BeautifulSoup / Selenium / Playwright | 可抓戰績、ID、排行等非官方頁 |     |                                                                                         |
-|   定時抓資料   |     Celery / Cron / .NET Background Service      |     定時更新資料庫     |     |                                                                                         |
-|   資料清洗    |              Pandas / LINQ / Regex               |  處理錯誤資料或非結構化內容  |     |                                                                                         |
-
----
-
-### 🛢️ 五、資料庫設計與分析
-
-| 項目       | 技術學習                           | 重點                      |
-| -------- | ------------------------------ | ----------------------- |
-| 資料庫選型    | PostgreSQL / SQL Server        | 支援 JSON/地理資料索引者佳        |
-| 資料表設計    | 使用正規化 / 指標儲存 / Index 優化        | 分析用欄位要額外設計（KDA、WinRate） |
-| 資料倉儲（可選） | DuckDB / ClickHouse / BigQuery | 做高效查詢用（可延伸）             |
-
----
-
-### 📈 六、數據分析與推薦系統（高階）
-
-|項目|技術學習|說明|
-|---|---|---|
-|資料統計|Python Pandas / R|分析勝率、角色搭配等|
-|ML 模型|Scikit-learn / TensorFlow（進階）|勝率預測、自動建議角色|
-|使用者行為追蹤|GA4 / PostHog / Mixpanel|分析熱門頁面與互動行為|
-
----
-
-### ☁️ 七、部署與運維
-
-| 項目         | 技術學習                                              | 推薦工具                                   |
-| ---------- | ------------------------------------------------- | -------------------------------------- |
-| 雲端部署       | Vercel / Netlify（前端）、Render / Fly.io / Linode（後端） | 小專案可用免費層                               |
-| Docker 容器化 | Docker + Docker Compose                           | [Docker 官方指南](https://chatgpt.com/c/f) |
-| CI/CD      | GitHub Actions / Azure DevOps                     | 自動部署前後端                                |
-| 監控         | Uptime Kuma / Grafana / Prometheus                | 可簡單整合異常通知                              |
-
----
-### 🧪 八、推薦開發順序（學習實作建議）
-
-1. ✅ 先從 Riot API 資料匯入與儲存開始（用 .NET + Redis + PostgreSQL）    
-2. ✅ 接著建立排行榜、查詢頁，開發 Web API + 前端頁面（React + Tailwind）    
-3. ✅ 引入快取（Redis）與排程更新（Hangfire）    
-4. ✅ 美化 UI、導入圖表呈現戰績分析    
-5. ✅ 若有餘力，做角色推薦（簡易機器學習或統計模型）
-    
----
-
-如需實際起手專案範本、API 申請、或開發流程規劃，我可以幫你建立起步架構。你也可以指定 Riot API、後端語言等再進一步細化。
-讓我知道你想從哪個模組先學，我可以給你[入門教學](https://chatgpt.com/c/f)、[專案架構模板](https://chatgpt.com/c/f)、或[Riot API 快速入門](https://chatgpt.com/c/f)。
+```
+LolTeamTracker.Api/
+├── Clients/          # IRiotApiClient, IDataDragonClient — 外部 API 溝通
+├── Controllers/      # MatchController, RiotController — HTTP 端點
+├── Services/         # IMatchAnalyzer, StaticDataService — 業務邏輯與流程編排
+├── Repositories/     # ITeamRepository, IStaticDataRepository — 資料存取
+├── Models/           # Domain Model、Request Model、Result DTO
+├── Validators/       # FluentValidation 規則
+├── Middleware/       # GlobalExceptionHandler
+├── Filters/          # ValidationFilter
+├── Data/             # team.json、Data Dragon 靜態資料
+└── Docs/             # 架構文件與改造記錄
+```

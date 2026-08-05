@@ -10,9 +10,9 @@ namespace LolTeamTracker.Api.Controllers
     public class RiotController : ControllerBase
     {
         private readonly IRiotApiClient _riotApiClient;
-        private readonly StaticDataService _staticDataService;
+        private readonly IStaticDataService _staticDataService;
 
-        public RiotController(IRiotApiClient riotApiClient, StaticDataService staticDataService )
+        public RiotController(IRiotApiClient riotApiClient, IStaticDataService staticDataService )
         {
             _riotApiClient = riotApiClient;
             _staticDataService = staticDataService;

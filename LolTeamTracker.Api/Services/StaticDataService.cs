@@ -7,14 +7,14 @@ namespace LolTeamTracker.Api.Services
     /// <summary>
     /// StaticDataService 處理靜態資料(如JSON、XML 等 ) 
     /// </summary>
-    public class StaticDataService
+    public class StaticDataService : IStaticDataService
     {
         private readonly IDataDragonClient _dataDragonClient;
         private readonly IStaticDataRepository _staticDataRepository;
         private readonly ILogger<StaticDataService> _logger;
 
 
-        public StaticDataService(IDataDragonClient dataDragonClient, IStaticDataRepository staticDataRepository, ILogger<StaticDataService> logger) 
+        public StaticDataService(IDataDragonClient dataDragonClient, IStaticDataRepository staticDataRepository, ILogger<StaticDataService> logger)
         {
             _dataDragonClient = dataDragonClient;
             _staticDataRepository = staticDataRepository;
@@ -50,7 +50,7 @@ namespace LolTeamTracker.Api.Services
                 }
                 results.FailedCount++;
             }
-            return results; 
+            return results;
         }
 
         /// <summary>

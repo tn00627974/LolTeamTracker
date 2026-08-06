@@ -16,45 +16,52 @@ namespace LolTeamTracker.Api.Middleware
         public async ValueTask<bool> TryHandleAsync(
             HttpContext httpContext,
             Exception exception,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+            )
         {
             string traceId = Activity.Current?.Id ?? httpContext.TraceIdentifier;
-            var (status, title, detail) = exception switch
+
+            var (status, title, detail,logLevel) = exception switch
             {
                 #region ResponseException For Client 
                 // 429 限流、或 StatusCode 是 null 代表根本連不上網路）怎麼處理？
                 HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests } => (
                     StatusCodes.Status429TooManyRequests,
                     "Too Many Requests",
-                    "查詢過快，請稍後再試試看!"
+                    "查詢過快，請稍後再試試看!",
+                    LogLevel.Warning
                 ),
 
                 // 400
                 HttpRequestException { StatusCode: System.Net.HttpStatusCode.BadRequest } => (
                     StatusCodes.Status400BadRequest,
                     "Bad Request",
-                    "請求參數格式不正確，請確認輸入內容"
+                    "請求參數格式不正確，請確認輸入內容",
+                    LogLevel.Information
                 ),
 
                 // 404 : 當使用者查詢時發生錯誤
                 HttpRequestException { StatusCode: System.Net.HttpStatusCode.NotFound } => (
                     StatusCodes.Status404NotFound,
                     "Player not found",
-                    "找不到玩家，請確認輸入的名稱與 TagLine 是否正確"
+                    "找不到玩家，請確認輸入的名稱與 TagLine 是否正確",
+                    LogLevel.Information
                 ),
 
                 // Riot 回 401 或 403：是系統API Key逾期，呼叫端不需要知道細節一樣回傳 500 
                 HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden } => (
                     StatusCodes.Status500InternalServerError,
                     "Server error",
-                    "系統發生未預期的錯誤"
+                    "系統發生未預期的錯誤",
+                    LogLevel.Error
                 ),
                 
                 // 其餘錯誤 
                 _ => (
                     StatusCodes.Status500InternalServerError,
                     "Server error",
-                    "系統發生未預期的錯誤" 
+                    "系統發生未預期的錯誤",
+                    LogLevel.Error
                 )
                 #endregion
             };
@@ -70,7 +77,7 @@ namespace LolTeamTracker.Api.Middleware
                 Extensions = new Dictionary<string, object?> {{ "traceId", traceId }}
             };
 
-            _logger.LogError(exception, "Unhandled exception occurred. TraceId: {TraceId}, Title: {Title}, Status: {Status}, Detail: {Detail}",
+            _logger.Log(logLevel, exception, "Unhandled exception occurred. TraceId: {TraceId}, Title: {Title}, Status: {Status}, Detail: {Detail}",
     traceId, problemDetails.Title, problemDetails.Status, problemDetails.Detail);
 
 

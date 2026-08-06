@@ -5,6 +5,6 @@ namespace LolTeamTracker.Api.Services
     public interface IStaticDataService
     {
         Task<DownloadAllResult> DownloadAllDataFilesAsync();
-        Task<DownloadAllResult> DownloadDataFileAsync(string version, string fileName);
+        Task<bool> DownloadDataFileAsync(string version, string fileName);
     }
 }

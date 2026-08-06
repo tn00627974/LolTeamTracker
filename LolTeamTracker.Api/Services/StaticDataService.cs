@@ -27,16 +27,13 @@ namespace LolTeamTracker.Api.Services
         /// <param name="version">版本號</param>
         /// <param name="fileName">檔案名稱</param>
         /// <returns></returns>
-        public async Task<DownloadAllResult> DownloadDataFileAsync(string version, string fileName)
+        public async Task<bool> DownloadDataFileAsync(string version, string fileName)
         {
-            string now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-            var results = new DownloadAllResult();
-
             try
             {
                 var content = await _dataDragonClient.GetDataFileAsync(version, fileName);
                 await _staticDataRepository.SaveDataFileAsync(fileName, content);
-                results.SuccessCount++;
+                return true;
             }
             catch (Exception ex)
             {
@@ -48,9 +45,8 @@ namespace LolTeamTracker.Api.Services
                 {
                     _logger.LogError(ex, "{FileName}發生錯誤", fileName);
                 }
-                results.FailedCount++;
+                return false;
             }
-            return results;
         }
 
         /// <summary>
@@ -72,7 +68,7 @@ namespace LolTeamTracker.Api.Services
             async Task FetchDataFileAsync(string fileName)
             {
                 var downloadResult = await DownloadDataFileAsync(latestVersion, fileName);
-                if (downloadResult.SuccessCount > 0)
+                if (downloadResult)
                 {
                     results.SuccessCount++;
                     results.SuccessFiles.Add(fileName);

@@ -4,13 +4,19 @@ using LolTeamTracker.Api.Filters;
 using LolTeamTracker.Api.Middleware;
 using LolTeamTracker.Api.Repositories;
 using LolTeamTracker.Api.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
 using Westwind.AspNetCore.LiveReload;
+using LolTeamTracker.Api.Data;
 
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Logging.AddJsonConsole(); 
+builder.Logging.AddJsonConsole();
+
+// Add DbContext 
+builder.Services.AddDbContext<AppDbContext>(options =>
+options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // "AccountBaseUrl": "https://asia.api.riotgames.com",
 builder.Services.AddHttpClient("Account", client =>

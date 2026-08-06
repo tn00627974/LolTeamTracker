@@ -1,0 +1,67 @@
+# LolTeamTracker 本機開發環境
+#
+# 使用方式：
+#   1. 複製 .env.example 成 .env，填入資料庫密碼
+#   2. docker compose up -d
+#   3. docker compose ps        # 看服務狀態，mssql 要是 healthy
+#   4. docker compose down      # 停止（資料保留在 volume）
+#      docker compose down -v   # 停止並刪除資料（連 volume 一起砍）
+
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: lolteamtracker-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      # 密碼從 .env 讀取，不寫死在這個檔案裡——這個檔案要進版控
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      # Developer 版：功能等同 Enterprise，但僅限開發測試用途，免費
+      MSSQL_PID: Developer
+    ports:
+      # 格式是 host:container
+      #   左邊 = 你 Windows 上的 port，可以改（例如本機已裝 SQL Server 佔用 1433 時）
+      #   右邊 = 容器內 SQL Server 監聽的 port，固定 1433，改了就連不上
+      # 這裡用 1434 對外，所以連線字串要寫 Server=localhost,1434
+      - "1434:1433"
+    volumes:
+      # 具名 volume：容器刪掉重建，資料還在。
+      # 沒有這行的話，docker compose down 之後你的資料表就消失了。
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      # 讓 compose 知道「容器啟動」不等於「資料庫可以連線」。
+      # SQL Server 冷啟動要十幾秒，這期間 port 已經開了但還不能接受查詢。
+      # 8/10 加入 API 服務後，API 要靠這個 healthcheck 才知道何時可以開始連線。
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # TODO ：把 API 容器化
+  #
+  # 需要想清楚的幾件事：
+  #   1. build.context 要設在哪？（Dockerfile 要 COPY .csproj 還原套件，
+  #      context 太窄會找不到檔案，太寬會讓 build 很慢）
+  #   2. depends_on 要不要加 condition: service_healthy？不加會怎樣？
+  #   3. 連線字串裡的 Server 要填什麼？
+  #      —— 提示：API 在容器內時，localhost 指的是「API 容器自己」，
+  #         不是你的 Windows，也不是 mssql 容器。想想 compose 幫你做了什麼。
+  #   4. API Key 這種機密怎麼傳進容器？（不要寫在這個檔案裡）
+  #
+  # api:
+  #   build:
+  #     context: ???
+  #     dockerfile: ???
+  #   environment:
+  #     ConnectionStrings__DefaultConnection: ???
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     mssql:
+  #       condition: ???
+  # ---------------------------------------------------------------
+
+volumes:
+  mssql-data:

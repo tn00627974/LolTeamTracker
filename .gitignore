@@ -19,6 +19,7 @@ out/
 
 ## ASP.NET specific
 appsettings.Development.json
+appsettings.Production.json
 appsettings.Local.json
 appsettings.*.Secrets.json
 
@@ -47,9 +48,10 @@ packages/
 publish/
 *.Publish.xml
 
-## Docker (如果未啟用)
-Dockerfile
-docker-compose*
+## Docker
+## 注意：Dockerfile 與 docker-compose.yml 是專案設定，必須進版控，不要 ignore。
+## 真正該擋的是裡面引用的機密（密碼、連線字串），那些放 .env（已於上方 ignore）。
+docker-compose.override.yml
 
 ## Optional: ignore test result files
 TestResults/
@@ -60,7 +62,14 @@ coverage/
 *.coverage
 
 ## Optional: ignore swagger auto-gen
-swagger/ appsettings.Development.json appsettings.json 
+## 一行一個 pattern；appsettings.Development.json 已於上方處理，
+## appsettings.json 需保留在版控（ApiKey 留空的設定範本）
+swagger/
+
+## EF Core 產生的部署腳本（產生物，隨時可用 migrations script 重產）
+## 注意：Scripts/ 底下的手寫 SQL 是原始碼，要進版控
+deploy*.sql
+*.migration.sql
 
 ## 個人檔案
 Ulysses 

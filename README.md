@@ -35,7 +35,8 @@ flowchart TD
 
     Riot[(Riot Games API)]
     DDragon[(Data Dragon CDN)]
-    Files[(team.json / Static JSON)]
+    DB[(SQL Server<br/>Docker 容器)]
+    Files[(Static JSON)]
 
     Client --> C
     C --> S
@@ -44,6 +45,7 @@ flowchart TD
     S --> R
     CL --> Riot
     CL --> DDragon
+    R --> DB
     R --> Files
 ```
 
@@ -67,12 +69,15 @@ flowchart TD
 | 項目 | 選用 |
 |---|---|
 | Runtime | .NET 8 / ASP.NET Core Web API |
+| 資料存取 | EF Core 8（Code First + Migration） |
+| 資料庫 | SQL Server 2022 |
+| 本機環境 | Docker Compose |
 | 參數驗證 | FluentValidation 12 + 自訂 `ValidationFilter` |
 | 錯誤處理 | `IExceptionHandler` + RFC 7807 `ProblemDetails` |
 | 日誌 | `Microsoft.Extensions.Logging`，`AddJsonConsole()` 輸出結構化 JSON |
+| 機密管理 | User Secrets（本機）／環境變數（容器） |
 | API 文件 | Swashbuckle（Swagger UI + ReDoc）+ XML 註解 |
 | 外部資料 | Riot Games API、Data Dragon CDN |
-| 資料儲存 | JSON 檔案（**規劃中**：EF Core + MSSQL） |
 
 ---
 
@@ -81,26 +86,44 @@ flowchart TD
 ### 前置需求
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)（用於啟動 SQL Server）
+- EF Core CLI：`dotnet tool install --global dotnet-ef --version 8.*`
 - 一組 Riot API Key（[開發者平台](https://developer.riotgames.com/) 申請，**開發用金鑰 24 小時失效**）
 
-### 設定
-
-API Key **不進版控**。`appsettings.json` 中的 `RiotApi:ApiKey` 一律留空，實際金鑰放在下列任一處：
+### 1. 啟動資料庫
 
 ```bash
-# 方式一：User Secrets（推薦，本機開發）
-cd LolTeamTracker.Api
-dotnet user-secrets init
-dotnet user-secrets set "RiotApi:ApiKey" "RGAPI-你的金鑰"
-
-# 方式二：環境變數
-export RiotApi__ApiKey="RGAPI-你的金鑰"   # Linux / macOS
-$env:RiotApi__ApiKey="RGAPI-你的金鑰"     # Windows PowerShell
+cp .env.example .env       # 填入 MSSQL_SA_PASSWORD（需含大小寫、數字、符號）
+docker compose up -d
+docker compose ps          # 等到 mssql 狀態為 (healthy)
 ```
 
-`appsettings.Development.json` 已列入 `.gitignore`。
+> `.env` 已列入 `.gitignore`。密碼請避開 `#`、`$`（`.env` 的註解與變數展開符號）以及 `;`（連線字串分隔符）。
 
-### 啟動
+### 2. 設定機密
+
+API Key 與連線字串 **不進版控**。`appsettings.json` 中的 `RiotApi:ApiKey` 一律留空，實際值放在下列任一處：
+
+```bash
+cd LolTeamTracker.Api
+dotnet user-secrets init
+
+dotnet user-secrets set "RiotApi:ApiKey" "RGAPI-你的金鑰"
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
+  "Server=localhost,1434;Database=LolTeamTracker;User Id=sa;Password=你的密碼;TrustServerCertificate=True"
+```
+
+User Secrets 存放於專案資料夾**之外**（`%APPDATA%\Microsoft\UserSecrets\`），因此不可能誤入版控。容器與正式環境改用環境變數（`ConnectionStrings__DefaultConnection`）。
+
+> `TrustServerCertificate=True` 是**本機開發的妥協** — Docker 內的 SQL Server 使用自簽憑證。正式環境應安裝受信任的憑證，否則等同「加密但不驗證對方身分」。
+
+### 3. 建立資料表
+
+```bash
+dotnet ef database update
+```
+
+### 4. 啟動 API
 
 ```bash
 dotnet restore
@@ -112,15 +135,9 @@ dotnet run --project LolTeamTracker.Api
 - Swagger UI — `https://localhost:{port}/swagger`
 - ReDoc — `https://localhost:{port}/redoc`
 
-### 戰隊名單設定
+### 戰隊名單
 
-團隊查詢功能讀取 `LolTeamTracker.Api/Data/Team/team.json`：
-
-```json
-[
-  { "gameName": "玩家名稱", "tagLine": "TW2" }
-]
-```
+團隊成員資料表為 `Players`（`Puuid` 建有唯一索引）。目前資料來源仍為 `LolTeamTracker.Api/Data/Team/team.json`，**資料存取層遷移至 EF Core 的作業進行中**（見 [目前狀態與 Roadmap](#目前狀態與-roadmap)）。
 
 ---
 
@@ -234,6 +251,33 @@ _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId
 
 `TraceId` 統一採 `Activity.Current?.Id ?? httpContext.TraceIdentifier`，讓錯誤回應中的 `traceId` 能直接對回日誌。`Program.cs` 加上 `AddJsonConsole()` 以驗證欄位確實有結構化，而非只是看起來像。
 
+### 6. 資料庫與 Entity 設計
+
+**Entity 與 DTO 分離**：`Models/Entities/Player`（資料庫）與 `Models/PlayerInfo`（對外傳遞）是兩個型別，即使欄位高度重疊。
+
+判準是同一句話：**會因為不同原因而改變的東西就該分開。** DTO 因 API 合約變動（前端要多一個欄位），Entity 因資料庫結構變動（加索引、加稽核欄位）。共用一個型別，等於讓其中一方的變動直接波及另一方。
+
+這句話同時決定了另外兩個選擇：
+
+| 決策 | 選擇 | 因為它們變動的原因不同 |
+|---|---|---|
+| 資料庫設定寫哪裡 | **Fluent API**（`OnModelCreating`），不用 Data Annotation | Entity 保持乾淨；且複合索引、filtered index 只有 Fluent API 做得到 |
+| 輸入驗證寫哪裡 | **FluentValidation**（`Validators/`） | `[MaxLength]` 同時被 EF Core 與 MVC 驗證讀取，語意模糊——它到底在限制資料庫欄位還是使用者輸入？ |
+
+**主鍵用自增 `Id`，而非 `Puuid`**：puuid 是 Riot 的永久玩家識別碼，直覺上是理想的自然鍵，但有三個問題：
+
+1. 78 字元的寬鍵——SQL Server 的叢集索引鍵會被複製進**每一個**非叢集索引
+2. 它由外部系統擁有（Riot 曾棄用 `summonerId` / `accountId` 改推 puuid）
+3. 資料匯入的時序上，它未必在插入當下就已知
+
+改用自增 `Id` 作代理鍵，`Puuid` 另建唯一索引——主鍵窄而穩定，唯一性仍由資料庫保證。
+
+**`Puuid` 的唯一索引不只防重複，更是併發的最後防線**：新增成員的流程會先查詢 puuid 是否已存在（存在則更新名稱，處理玩家改名）。但兩個併發請求可能同時查到「不存在」而都執行插入。
+
+> **應用層的檢查是效能優化，資料庫約束才是正確性保證。** 應用層先查是為了讓多數情況不必走到例外處理，但唯一性的最終保障只能在資料庫——只有它能序列化併發寫入。
+
+**Migration 不直接套用於正式環境**：`dotnet ef database update` 僅用於本機。正式環境應以 `dotnet ef migrations script --idempotent` 產生 SQL 交付審核——結構變更需要留存紀錄、可回溯，且應用程式的部署身分不應具備 DDL 權限。
+
 ---
 
 ## 目前狀態與 Roadmap
@@ -246,17 +290,20 @@ _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId
 | 全域例外處理 | ✅ 完成 | |
 | FluentValidation | ✅ 完成 | |
 | 結構化日誌 | ✅ 完成 | |
-| **強型別 DTO** | 🔜 規劃中 | 目前 Riot 回應以 `JsonElement` 傳遞，`GetProperty("x")` 散落在 Service 層。改成 DTO 後，欄位缺漏會在反序列化邊界就失敗，而不是在邏輯深處才 runtime 爆炸 |
-| **EF Core + MSSQL** | 🔜 規劃中 | `team.json` 搬進資料庫。因為已經抽出 `ITeamRepository`，預期改動只會落在 `Repositories/` 這一層 |
+| Docker Compose（本機） | ✅ 完成 | 一行指令啟動 SQL Server，含 healthcheck 與資料持久化 volume |
+| **EF Core + SQL Server** | 🚧 進行中 | Entity、`DbContext`、Migration、資料表皆已完成；**資料存取層（`ITeamRepository` 的實作）尚未從 JSON 切換至 EF Core** |
 | **單元測試** | 🔜 規劃中 | 介面已就緒，可用測試替身隔離外部 API |
+| **強型別 DTO** | 🔜 規劃中 | 目前 Riot 回應以 `JsonElement` 傳遞，`GetProperty("x")` 散落在 Service 層。改成 DTO 後，欄位缺漏會在反序列化邊界就失敗，而不是在邏輯深處才 runtime 爆炸 |
+| API 容器化 | 🔜 規劃中 | 目前 compose 只含資料庫，API 尚未容器化 |
 | 快取（Cache-Aside） | 🔜 規劃中 | Riot API 有速率限制，重複查詢應快取 |
-| Docker | 🔜 規劃中 | |
 
 ### 已知限制
 
 - **Riot 開發用 API Key 24 小時失效**，過期後所有查詢會失敗（本服務會回 `500`，日誌中可見上游的 `401`）
 - 團隊查詢採序列呼叫，隊員數量多時延遲會線性累加，尚未平行化或加上速率限制保護
+- **`PlayerInfo` 未接住資料來源中既有的 `puuid`**，導致每次查詢戰績都重新呼叫 API 取得已知的值；隊員數 N 就是 N 次多餘請求。待資料存取層切換至 EF Core 後一併修正
 - 尚未導入重試 / 熔斷機制（Polly），遇到 Riot API 暫時性失敗不會自動重試
+- 尚無自動化測試
 
 ---
 
@@ -268,10 +315,17 @@ LolTeamTracker.Api/
 ├── Controllers/      # MatchController, RiotController — HTTP 端點
 ├── Services/         # IMatchAnalyzer, StaticDataService — 業務邏輯與流程編排
 ├── Repositories/     # ITeamRepository, IStaticDataRepository — 資料存取
-├── Models/           # Domain Model、Request Model、Result DTO
+├── Data/             # AppDbContext（EF Core）、靜態 JSON 資料
+├── Migrations/       # EF Core 自動產生，勿手動修改
+├── Models/
+│   ├── Entities/     # 資料庫 Entity（Player）
+│   ├── Requests/     # API 輸入模型
+│   └── Results/      # API 回應 DTO
 ├── Validators/       # FluentValidation 規則
 ├── Middleware/       # GlobalExceptionHandler
 ├── Filters/          # ValidationFilter
-├── Data/             # team.json、Data Dragon 靜態資料
 └── Docs/             # 架構文件與改造記錄
+
+docker-compose.yml    # 本機開發環境（SQL Server）
+.env.example          # 環境變數範本
 ```

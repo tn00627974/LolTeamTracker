@@ -1,5 +1,6 @@
 ﻿using FluentValidation;
 using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Data;
 using LolTeamTracker.Api.Filters;
 using LolTeamTracker.Api.Middleware;
 using LolTeamTracker.Api.Repositories;
@@ -8,15 +9,20 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
 using Westwind.AspNetCore.LiveReload;
-using LolTeamTracker.Api.Data;
 
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Logging.AddJsonConsole();
 
 // Add DbContext 
 builder.Services.AddDbContext<AppDbContext>(options =>
-options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    if (builder.Environment.IsDevelopment())
+    {
+        options.LogTo(Console.WriteLine, LogLevel.Information);
+    }
+});
+
 
 // "AccountBaseUrl": "https://asia.api.riotgames.com",
 builder.Services.AddHttpClient("Account", client =>
@@ -55,7 +61,7 @@ builder.Services.AddControllers(options =>
 
 builder.Services.AddScoped<IMatchAnalyzer,MatchAnalyzer>(); 
 builder.Services.AddScoped<IRiotApiClient, RiotApiClient>();
-builder.Services.AddScoped<ITeamRepository, TeamRepository>();
+builder.Services.AddScoped<ITeamRepository, EfTeamRepository>();
 builder.Services.AddScoped<IStaticDataService, StaticDataService>();
 builder.Services.AddScoped<IDataDragonClient, DataDragonClient>();
 builder.Services.AddScoped<IStaticDataRepository, StaticDataRepository>();

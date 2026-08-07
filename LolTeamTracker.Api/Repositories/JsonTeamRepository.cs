@@ -3,11 +3,16 @@ using System.Text.Json;
 
 namespace LolTeamTracker.Api.Repositories
 {
-    public class TeamRepository : ITeamRepository
+    /// <summary>
+    /// 從 Data/Team/team.json 讀取戰隊成員（EF Core 導入前的原始實作）。
+    /// 保留此實作是為了對照——它與 <see cref="EfTeamRepository"/> 遵循同一個介面契約，
+    /// 切換儲存方式時呼叫端不需任何改動。
+    /// </summary>
+    public class JsonTeamRepository : ITeamRepository
     {
         private readonly IWebHostEnvironment _env;
 
-        public TeamRepository(IWebHostEnvironment env)
+        public JsonTeamRepository(IWebHostEnvironment env)
         {
             _env = env;
         }

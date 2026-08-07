@@ -74,7 +74,7 @@ flowchart TD
 | 本機環境 | Docker Compose |
 | 參數驗證 | FluentValidation 12 + 自訂 `ValidationFilter` |
 | 錯誤處理 | `IExceptionHandler` + RFC 7807 `ProblemDetails` |
-| 日誌 | `Microsoft.Extensions.Logging`，`AddJsonConsole()` 輸出結構化 JSON |
+| 日誌 | `Microsoft.Extensions.Logging` + message template 結構化欄位 |
 | 機密管理 | User Secrets（本機）／環境變數（容器） |
 | API 文件 | Swashbuckle（Swagger UI + ReDoc）+ XML 註解 |
 | 外部資料 | Riot Games API、Data Dragon CDN |
@@ -249,7 +249,9 @@ _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId
     gameName, tagLine, matchId);
 ```
 
-`TraceId` 統一採 `Activity.Current?.Id ?? httpContext.TraceIdentifier`，讓錯誤回應中的 `traceId` 能直接對回日誌。`Program.cs` 加上 `AddJsonConsole()` 以驗證欄位確實有結構化，而非只是看起來像。
+`TraceId` 統一採 `Activity.Current?.Id ?? httpContext.TraceIdentifier`，讓錯誤回應中的 `traceId` 能直接對回日誌。
+
+**結構化的本質是 message template，不是輸出格式。** `{GameName}` 這類具名參數讓欄位在日誌管線中保持獨立、可被查詢；至於輸出成純文字或 JSON，只是換一個 formatter 的事，取決於接收端是人還是日誌收集系統。目前使用預設的 console 輸出。
 
 ### 6. 資料庫與 Entity 設計
 

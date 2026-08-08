@@ -211,7 +211,7 @@ namespace LolTeamTracker.Tests.Services
             // ── Assert ──
             // 三場中壞一場，仍應拿回另外兩場——失敗的那場由 catch 記錄後計入 failedCount，
             // 不向上拋出，避免單一場次的暫時性失敗導致整批查詢無結果。
-            Assert.That(result, Has.Count.EqualTo(2));
+            Assert.That(result.MatchSummaryList, Has.Count.EqualTo(2));
         }
 
         /// <summary>
@@ -294,7 +294,7 @@ namespace LolTeamTracker.Tests.Services
             // ── Assert ──
             // 2 位成員 × 每人 2 場 = 4 筆。期望值由測試資料推算而來，
             // 不從 result 本身取值——否則又成了自我實現的測試。
-            Assert.That(result, Has.Count.EqualTo(4));
+            Assert.That(result.MatchSummaryList, Has.Count.EqualTo(4));
         }
     }
 }

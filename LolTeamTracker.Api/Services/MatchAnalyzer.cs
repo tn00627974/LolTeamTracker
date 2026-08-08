@@ -1,5 +1,6 @@
 ﻿using LolTeamTracker.Api.Clients;
 using LolTeamTracker.Api.Models;
+using LolTeamTracker.Api.Models.Results;
 using LolTeamTracker.Api.Repositories;
 using System.Text.Json;
 
@@ -90,18 +91,18 @@ namespace LolTeamTracker.Api.Services
         /// 載入 JSON 檔案中的隊伍成員資料，並取得每位成員的比賽摘要列表
         /// </summary>
         /// <returns></returns>
-        public async Task<List<MatchSummary>> GetMatchSummariesTeamsAsync()
+        public async Task<MatchSummaryResult> GetMatchSummariesTeamsAsync()
         {
             var players = await _teamRepository.LoadTeamFromDataAsync();
-            var allResults = new List<MatchSummary>();
+            var allResults = new MatchSummaryResult();
 
             // 要先用 riotApiClient 取得成員的 puuid 
-            foreach (var player in players)
+            foreach (var player in players) 
             {
                 // 取得玩家的 puuid
-                var summaries = await GetMatchSummariesPlayerAsync(player.GameName, player.TagLine ,10);
-                if (summaries != null)
-                    allResults.AddRange(summaries); // 將每個玩家的比賽列表加入到總結果中
+                var summaries = await GetMatchSummariesPlayerAsync(player.GameName, player.TagLine, 10);
+                allResults.MatchSummaryList.AddRange(summaries.MatchSummaryList);
+                allResults.FailedCount += summaries.FailedCount;
             }
             return allResults;
         }
@@ -113,12 +114,11 @@ namespace LolTeamTracker.Api.Services
         /// <param name="tagLine">#標籤</param>
         /// <param name="count">搜尋場次</param>
         /// <returns></returns>
-        public async Task<List<MatchSummary>> GetMatchSummariesPlayerAsync(string gameName, string tagLine, int count)
+        public async Task<MatchSummaryResult> GetMatchSummariesPlayerAsync(string gameName, string tagLine, int count)
         {
-            var result = new List<MatchSummary>();
+            var results = new MatchSummaryResult();
             var puuid = await _riotApiClient.GetPuuidAsync(gameName, tagLine);
             var matchIds = await _riotApiClient.GetMatchIdsAsync(puuid, 0, count);
-            int failedCount = 0; // 錯誤次數進catch遞增
 
             foreach (var matchId in matchIds)
             {
@@ -127,25 +127,25 @@ namespace LolTeamTracker.Api.Services
                     var summary = await GetMatchSummaryAsync(matchId, puuid, gameName, tagLine);
                     if (summary != null)
                     {
-                        result.Add(summary);
+                        results.MatchSummaryList.Add(summary);
                     }
-                    else 
+                    else
                     {
-                        failedCount++;
+                        results.FailedCount++;
                     }
                 }
                 catch (Exception ex)
                 {
-                     failedCount++; // 當發生ex追蹤錯誤次數。
+                    results.FailedCount++; // 當發生ex追蹤錯誤次數。
                     _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId: {MatchId}", gameName, tagLine, matchId);
                 }                
             }
-            if (failedCount > 0)
+            if (results.FailedCount > 0)
             {
-                _logger.LogWarning("Player: {GameName}#{TagLine} 查詢完成，成功 {SuccessCount} 場，失敗 {FailedCount} 場",gameName, tagLine, result.Count, failedCount);
+                _logger.LogWarning("Player: {GameName}#{TagLine} 查詢完成，成功 {SuccessCount} 場，失敗 {FailedCount} 場",gameName, tagLine, results.SuccessCount, results.FailedCount);
             }
 
-            return result;
+            return results;
         }
 
         /*         

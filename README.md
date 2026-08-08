@@ -161,7 +161,27 @@ dotnet test
 | Method | 路徑 | 說明 |
 |---|---|---|
 | `GET` | `/api/match/match-summaries?gameName={name}&tagLine={tag}&count={n}` | 查單一玩家近期戰績，回傳整理後的 KDA、CS、分路、遊戲模式、台灣時間 |
-| `GET` | `/api/match/team-analysis` | 讀取戰隊名單，批次查詢全隊戰績 |
+| `GET` | `/api/match/team-analysis` | 讀取 `Players` 資料表的成員名單，批次查詢全隊戰績 |
+
+兩個端點都是**批次查詢**，個別場次失敗不中斷整批作業，狀態碼依實際結果分流：
+
+| 情況 | 狀態碼 |
+|---|---|
+| 全部成功 | `200 OK` |
+| 部分成功 | `207 Multi-Status` |
+| 全部失敗 | `502 Bad Gateway` |
+
+回應主體為 `MatchSummaryResult`：
+
+```json
+{
+  "matchSummaryList": [ { "champion": "Ahri", "kills": 10, "totalCS": 200, "...": "..." } ],
+  "successCount": 8,
+  "failedCount": 2
+}
+```
+
+> `failedCount` 存在的理由：失敗的場次不會出現在 `matchSummaryList` 裡，若不另外回報，呼叫端拿到 8 筆時無從得知原本應有 10 筆。**不中斷 ≠ 不告知**（見 [設計決策 #2](#2-錯誤不當作資料回傳)）。
 
 ### `TeamController` — 戰隊名單維護
 
@@ -236,6 +256,16 @@ dotnet test
 | 全部失敗 | `502 Bad Gateway` | 上游 CDN 出問題，不是本服務的 bug——用 500 會誤導維運方向 |
 
 **原則：** Service 層失敗一律拋例外，不 `return null` 也不回錯誤字串。錯誤混進正常回傳值，呼叫端遲早會忘記檢查。
+
+**「不中斷」與「不告知」是兩件事。** 同一條原則後來回頭檢驗了 `MatchAnalyzer`，得出不同結論：
+
+批次查詢十場比賽，其中一場失敗時**不應**中斷整批——這與上述原則不衝突，因為「單一場次失敗」和「整個查詢失敗」是不同粒度的事件。金融或批次系統若讓一筆壞資料拖垮整批作業，代價遠高於跳過它。
+
+但原本的實作只做到「不中斷」：例外被 `catch` 後僅記錄日誌，方法回傳 `List<MatchSummary>`。呼叫端拿到 8 筆時，**無從得知原本應有 10 筆**——失敗資訊只存在於日誌，沒有進入回傳值。這才是真正的「錯誤被吞掉」。
+
+改為回傳 `MatchSummaryResult`（含 `FailedCount`）後，兩個 `MatchController` 端點才得以比照 `download-all-json` 做狀態碼分流。
+
+> 值得記錄的是判準的一致性：`DownloadAllResult` 保留 `SuccessFiles` 是必要的（下載成功後內容寫入磁碟，回傳值裡只剩檔名）；`MatchSummaryResult` 就不需要對應欄位，因為成功的內容本身就在 `MatchSummaryList` 裡。**同一個欄位在不同情境下一個必要、一個冗餘，判準是「這份資訊還有沒有別的地方能拿到」。**
 
 ### 3. 全域例外處理：對外給安全訊息，對內留完整脈絡
 
@@ -369,7 +399,7 @@ LolTeamTracker.Api/
 ├── Models/
 │   ├── Entities/     # 資料庫 Entity（Player）
 │   ├── Requests/     # API 輸入模型
-│   └── Results/      # API 回應 DTO
+│   └── Results/      # API 回應 DTO（DownloadAllResult、MatchSummaryResult）
 ├── Validators/       # FluentValidation 規則
 ├── Middleware/       # GlobalExceptionHandler
 ├── Filters/          # ValidationFilter

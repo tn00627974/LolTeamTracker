@@ -33,6 +33,8 @@ flowchart TD
         R["Repositories/<br/>只管資料存取"]
     end
 
+    Tests["LolTeamTracker.Tests<br/>NUnit + Moq"]
+
     Riot[(Riot Games API)]
     DDragon[(Data Dragon CDN)]
     DB[(SQL Server<br/>Docker 容器)]
@@ -47,6 +49,8 @@ flowchart TD
     CL --> DDragon
     R --> DB
     R --> Files
+
+    Tests -. 注入測試替身，不觸及外部依賴 .-> S
 ```
 
 | 資料夾 | 職責 | 不做什麼 |
@@ -72,6 +76,7 @@ flowchart TD
 | 資料存取 | EF Core 8（Code First + Migration） |
 | 資料庫 | SQL Server 2022 |
 | 本機環境 | Docker Compose |
+| 單元測試 | NUnit 3.14 + Moq 4.20 |
 | 參數驗證 | FluentValidation 12 + 自訂 `ValidationFilter` |
 | 錯誤處理 | `IExceptionHandler` + RFC 7807 `ProblemDetails` |
 | 日誌 | `Microsoft.Extensions.Logging` + message template 結構化欄位 |
@@ -135,9 +140,17 @@ dotnet run --project LolTeamTracker.Api
 - Swagger UI — `https://localhost:{port}/swagger`
 - ReDoc — `https://localhost:{port}/redoc`
 
+### 5. 執行測試
+
+```bash
+dotnet test
+```
+
+測試**不需要**資料庫或 Riot API Key —— 外部依賴一律由測試替身取代（見 [設計決策 #7](#7-測試以介面邊界隔離外部依賴)）。
+
 ### 戰隊名單
 
-團隊成員資料表為 `Players`（`Puuid` 建有唯一索引）。目前資料來源仍為 `LolTeamTracker.Api/Data/Team/team.json`，**資料存取層遷移至 EF Core 的作業進行中**（見 [目前狀態與 Roadmap](#目前狀態與-roadmap)）。
+團隊成員資料表為 `Players`（`Puuid` 建有唯一索引）。資料存取層已由 JSON 檔案切換至 EF Core（`EfTeamRepository`），成員可透過 `PUT /api/team/members` 新增或更新。
 
 ---
 
@@ -149,6 +162,14 @@ dotnet run --project LolTeamTracker.Api
 |---|---|---|
 | `GET` | `/api/match/match-summaries?gameName={name}&tagLine={tag}&count={n}` | 查單一玩家近期戰績，回傳整理後的 KDA、CS、分路、遊戲模式、台灣時間 |
 | `GET` | `/api/match/team-analysis` | 讀取戰隊名單，批次查詢全隊戰績 |
+
+### `TeamController` — 戰隊名單維護
+
+| Method | 路徑 | 說明 |
+|---|---|---|
+| `PUT` | `/api/team/members` | 以 Riot ID 新增成員；已存在則更新名稱。成功回 `204 No Content` |
+
+> 用 `PUT` 而非 `POST`：本操作**冪等**——以相同參數呼叫多次的結果，與呼叫一次相同，因此重試是安全的。回 `204` 而非 `200`，因為沒有內容可回，`200` 在語意上暗示 body 有東西。
 
 ### `RiotController` — Riot API 代理與靜態資料
 
@@ -280,6 +301,30 @@ _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId
 
 **Migration 不直接套用於正式環境**：`dotnet ef database update` 僅用於本機。正式環境應以 `dotnet ef migrations script --idempotent` 產生 SQL 交付審核——結構變更需要留存紀錄、可回溯，且應用程式的部署身分不應具備 DDL 權限。
 
+### 7. 測試：以介面邊界隔離外部依賴
+
+**為什麼這個專案非測不可**：Riot 的開發用金鑰 24 小時失效，且 API 有速率限制。任何直接呼叫真實 API 的測試，隔天必定變成偽陽性失敗——**不穩定的測試比沒有測試更糟，因為團隊會開始習慣忽略紅燈。**
+
+`MatchAnalyzer` 只依賴 `IRiotApiClient` 介面，因此測試時用 Moq 給它一份固定的 JSON 回應即可：
+
+```csharp
+mockRiotApiClient
+    .Setup(x => x.GetMatchSummaryAsync(It.IsAny<string>()))
+    .ReturnsAsync(matchData);          // 固定 fixture，不連網路
+```
+
+這是抽介面的**第二次回報**。第一次是換掉 `ITeamRepository` 的實作（JSON → EF Core）時，`git diff --stat` 顯示改動不曾越過 `Repositories/`；這次證明「換成假的實作」同樣不需要動被測程式一行。
+
+**期望值一律寫成人工算好的常數，不在測試裡重算。** 時區轉換的斷言是：
+
+```csharp
+Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
+```
+
+而不是在測試裡重跑一次 `TimeZoneInfo.ConvertTimeFromUtc(...)`。後者叫 **self-fulfilling test**——期望值用跟被測程式相同的邏輯算出來，被測邏輯改錯時期望值會跟著錯，測試永遠綠燈。**綠燈但驗不到東西，比紅燈危險，因為它提供的是虛假的安全感。**
+
+**目前覆蓋範圍（誠實列出）**：僅 `MatchAnalyzer` 的欄位解析、CS 計算與時區轉換。`Controllers/`、`Repositories/`、`GlobalExceptionHandler` 尚無測試，整合測試（`WebApplicationFactory`）亦未導入。
+
 ---
 
 ## 目前狀態與 Roadmap
@@ -293,8 +338,8 @@ _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId
 | FluentValidation | ✅ 完成 | |
 | 結構化日誌 | ✅ 完成 | |
 | Docker Compose（本機） | ✅ 完成 | 一行指令啟動 SQL Server，含 healthcheck 與資料持久化 volume |
-| **EF Core + SQL Server** | 🚧 進行中 | Entity、`DbContext`、Migration、資料表皆已完成；**資料存取層（`ITeamRepository` 的實作）尚未從 JSON 切換至 EF Core** |
-| **單元測試** | 🔜 規劃中 | 介面已就緒，可用測試替身隔離外部 API |
+| **EF Core + SQL Server** | ✅ 完成 | Entity、`DbContext`、Migration、資料表完成；`ITeamRepository` 的實作已由 JSON 切換至 `EfTeamRepository` |
+| **單元測試** | 🚧 進行中 | NUnit + Moq 已建置，目前僅涵蓋 `MatchAnalyzer`；Controller / Repository / 整合測試尚未導入 |
 | **強型別 DTO** | 🔜 規劃中 | 目前 Riot 回應以 `JsonElement` 傳遞，`GetProperty("x")` 散落在 Service 層。改成 DTO 後，欄位缺漏會在反序列化邊界就失敗，而不是在邏輯深處才 runtime 爆炸 |
 | API 容器化 | 🔜 規劃中 | 目前 compose 只含資料庫，API 尚未容器化 |
 | 快取（Cache-Aside） | 🔜 規劃中 | Riot API 有速率限制，重複查詢應快取 |
@@ -303,9 +348,11 @@ _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId
 
 - **Riot 開發用 API Key 24 小時失效**，過期後所有查詢會失敗（本服務會回 `500`，日誌中可見上游的 `401`）
 - 團隊查詢採序列呼叫，隊員數量多時延遲會線性累加，尚未平行化或加上速率限制保護
-- **`PlayerInfo` 未接住資料來源中既有的 `puuid`**，導致每次查詢戰績都重新呼叫 API 取得已知的值；隊員數 N 就是 N 次多餘請求。待資料存取層切換至 EF Core 後一併修正
+- **`PlayerInfo` 未接住資料庫中既有的 `Puuid`**，導致每次查詢戰績都重新呼叫 API 取得已知的值；隊員數 N 就是 N 次多餘請求
+- **`Puuid` 並非永久識別碼**。實測發現既有六筆資料的 puuid 全部與現行查詢結果不符（同一支金鑰重查得到相同新值，可排除「與金鑰綁定」的假設），推測 Riot 曾做過系統性遷移。因此 `Puuid` 在本專案的定位是**可能過期的快取**，真正的身分是自增 `Id`；upsert 會先以 puuid 查詢，找不到再以 `GameName + TagLine` 查詢並更新 puuid
 - 尚未導入重試 / 熔斷機制（Polly），遇到 Riot API 暫時性失敗不會自動重試
-- 尚無自動化測試
+- 測試僅涵蓋 `MatchAnalyzer`，且尚無整合測試——實際的 HTTP 管線（路由、驗證 filter、例外處理）未被測試覆蓋
+- **時區轉換使用 Windows 專屬的時區 ID（`"Taipei Standard Time"`）**，在 Linux 容器中會拋 `TimeZoneNotFoundException`。API 容器化時需一併處理
 
 ---
 
@@ -314,7 +361,7 @@ _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId
 ```
 LolTeamTracker.Api/
 ├── Clients/          # IRiotApiClient, IDataDragonClient — 外部 API 溝通
-├── Controllers/      # MatchController, RiotController — HTTP 端點
+├── Controllers/      # MatchController, RiotController, TeamController — HTTP 端點
 ├── Services/         # IMatchAnalyzer, StaticDataService — 業務邏輯與流程編排
 ├── Repositories/     # ITeamRepository, IStaticDataRepository — 資料存取
 ├── Data/             # AppDbContext（EF Core）、靜態 JSON 資料
@@ -327,6 +374,9 @@ LolTeamTracker.Api/
 ├── Middleware/       # GlobalExceptionHandler
 ├── Filters/          # ValidationFilter
 └── Docs/             # 架構文件與改造記錄
+
+LolTeamTracker.Tests/
+└── Services/         # MatchAnalyzerTests — 以 Moq 替換 IRiotApiClient
 
 docker-compose.yml    # 本機開發環境（SQL Server）
 .env.example          # 環境變數範本

@@ -62,6 +62,7 @@ builder.Services.AddControllers(options =>
 builder.Services.AddScoped<IMatchAnalyzer,MatchAnalyzer>(); 
 builder.Services.AddScoped<IRiotApiClient, RiotApiClient>();
 builder.Services.AddScoped<ITeamRepository, EfTeamRepository>();
+builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IStaticDataService, StaticDataService>();
 builder.Services.AddScoped<IDataDragonClient, DataDragonClient>();
 builder.Services.AddScoped<IStaticDataRepository, StaticDataRepository>();

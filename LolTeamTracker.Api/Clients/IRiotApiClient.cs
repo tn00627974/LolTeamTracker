@@ -1,5 +1,4 @@
-﻿using LolTeamTracker.Api.Models.Requests;
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace LolTeamTracker.Api.Clients
 {

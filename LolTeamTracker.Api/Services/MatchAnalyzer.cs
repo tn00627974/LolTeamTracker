@@ -35,7 +35,8 @@ namespace LolTeamTracker.Api.Services
             var participant = info.GetProperty("participants")
                                   .EnumerateArray()
                                   .FirstOrDefault(p => p.GetProperty("puuid").GetString() == puuid);
-            
+
+           
             if (participant.ValueKind == JsonValueKind.Undefined) // 如果找不到對應的參與者
                 return null;
 
@@ -44,11 +45,12 @@ namespace LolTeamTracker.Api.Services
             var deaths = participant.GetProperty("deaths").GetInt32();
             var assists = participant.GetProperty("assists").GetInt32();
             var win = participant.GetProperty("win").GetBoolean();
-            string teamPosition = participant.GetProperty("teamPosition").GetString();
+            string teamPosition = participant.GetProperty("teamPosition").GetString() ?? "未知";
             string laneName = GetLaneName(teamPosition);
 
             // 處理UTC國際時間格式 => 轉為台灣時間 24小時格式
-            var dateTimeUtc = DateTimeOffset.FromUnixTimeMilliseconds(info.GetProperty("gameStartTimestamp").GetInt64()).UtcDateTime;
+            var gameStartTimestamp = info.GetProperty("gameStartTimestamp").GetInt64();
+            var dateTimeUtc = DateTimeOffset.FromUnixTimeMilliseconds(gameStartTimestamp).UtcDateTime;
             var taiwanZone = TimeZoneInfo.ConvertTimeFromUtc(dateTimeUtc, TimeZoneInfo.FindSystemTimeZoneById("Taipei Standard Time"));
             var taiwanTime = taiwanZone.ToString("yyyy/MM/dd HH:mm:ss");
 

@@ -1,7 +1,7 @@
 # LolTeamTracker 本機開發環境
 #
 # 使用方式：
-#   1. 複製 .env.example 成 .env，填入資料庫密碼
+#   1. 複製 .env.example 成 .env，填入資料庫密碼 與 Riot API Key
 #   2. docker compose up -d
 #   3. docker compose ps        # 看服務狀態，mssql 要是 healthy
 #   4. docker compose down      # 停止（資料保留在 volume）
@@ -39,29 +39,23 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------
-  # TODO ：把 API 容器化
-  #
-  # 需要想清楚的幾件事：
-  #   1. build.context 要設在哪？（Dockerfile 要 COPY .csproj 還原套件，
-  #      context 太窄會找不到檔案，太寬會讓 build 很慢）
-  #   2. depends_on 要不要加 condition: service_healthy？不加會怎樣？
-  #   3. 連線字串裡的 Server 要填什麼？
-  #      —— 提示：API 在容器內時，localhost 指的是「API 容器自己」，
-  #         不是你的 Windows，也不是 mssql 容器。想想 compose 幫你做了什麼。
-  #   4. API Key 這種機密怎麼傳進容器？（不要寫在這個檔案裡）
-  #
-  # api:
-  #   build:
-  #     context: ???
-  #     dockerfile: ???
-  #   environment:
-  #     ConnectionStrings__DefaultConnection: ???
-  #   ports:
-  #     - "8080:8080"
-  #   depends_on:
-  #     mssql:
-  #       condition: ???
-  # ---------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: LolTeamTracker.Api/Dockerfile
+    container_name: lolteamtracker-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development # 設定 ASP.NET Core 環境為 Development (appsettings.Development.json)
+      ConnectionStrings__DefaultConnection: "Server=mssql,1433;Database=LolTeamTracker;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
+      RiotApi__ApiKey: ${RIOT_API_KEY}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mssql:
+        condition: service_healthy
+    restart: unless-stopped
 
+    
 volumes:
   mssql-data:
+  # ---------------------------------------------------------------

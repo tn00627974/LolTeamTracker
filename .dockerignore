@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/*.user
+.git/
+.env
+design/
+LolTeamTracker.Web/
+**/appsettings.Development.json

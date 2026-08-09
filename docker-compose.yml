@@ -30,7 +30,6 @@ services:
     healthcheck:
       # 讓 compose 知道「容器啟動」不等於「資料庫可以連線」。
       # SQL Server 冷啟動要十幾秒，這期間 port 已經開了但還不能接受查詢。
-      # 8/10 加入 API 服務後，API 要靠這個 healthcheck 才知道何時可以開始連線。
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q 'SELECT 1' || exit 1"]
       interval: 10s
       timeout: 5s

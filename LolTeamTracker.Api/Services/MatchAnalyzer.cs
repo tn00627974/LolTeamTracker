@@ -186,16 +186,15 @@ namespace LolTeamTracker.Api.Services
                 case "JUNGLE":
                     return "打野";
                 case "MIDDLE":
-                //case "MID":
                     return "中路";
                 case "BOTTOM":
-                //case "BOT":
                     return "下路";
                 case "UTILITY":
-                //case "SUPPORT":
                     return "輔助";
+                case "":
+                    return "無路線"; // ARAM
                 default:
-                    return $"未知路線 ({teamPosition})";
+                    return $"未知路線:{teamPosition}";
             }
         }
     }

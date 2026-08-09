@@ -165,7 +165,8 @@ namespace LolTeamTracker.Tests.Services
         [TestCase("MIDDLE", "中路")]
         [TestCase("BOTTOM", "下路")]
         [TestCase("UTILITY", "輔助")]
-        [TestCase("TEST", "未知路線 (TEST)")]   // 邊界情況：Riot 傳回沒見過的位置時不應丟例外
+        [TestCase("TEST", "未知路線:TEST")]   // Riot 給了值但對照表沒有 → 原樣顯示代號，提示對照表該補
+        [TestCase("", "無路線")]              // Riot 沒給值（大亂鬥無路線概念）→ 正常情況，不是錯誤
         public void GetLaneName_WithGivenPosition_ReturnsChineseName(string teamPosition, string expected)
         {
             // 這個方法是純函式，不碰任何依賴，所以替身完全不用設定行為

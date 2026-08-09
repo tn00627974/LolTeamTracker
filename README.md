@@ -1,5 +1,7 @@
 # LolTeamTracker
 
+[![CI](https://github.com/tn00627974/RiotAPI/actions/workflows/ci.yml/badge.svg)](https://github.com/tn00627974/RiotAPI/actions/workflows/ci.yml)
+
 > 串接 Riot Games API 的英雄聯盟戰隊戰績分析後端服務，以 ASP.NET Core 8 實作。
 
 這個專案的目的不只是「把資料撈出來」，而是拿一個會**實際失敗的外部依賴**（Riot API 有速率限制、24 小時就過期的開發金鑰、會回 404 的查詢），練習後端該有的邊界處理：錯誤怎麼分類、日誌怎麼查、職責怎麼切。
@@ -25,7 +27,7 @@
 flowchart TD
     Client[HTTP Client / Swagger]
 
-    subgraph API["LolTeamTracker.Api"]
+    subgraph API["LolTeamTracker.Api（Docker 容器）"]
         direction TB
         C["Controllers/<br/>只處理 HTTP：參數綁定、狀態碼、回傳"]
         S["Services/<br/>只做「算」：業務邏輯、資料轉換"]
@@ -75,7 +77,8 @@ flowchart TD
 | Runtime | .NET 8 / ASP.NET Core Web API |
 | 資料存取 | EF Core 8（Code First + Migration） |
 | 資料庫 | SQL Server 2022 |
-| 本機環境 | Docker Compose |
+| 容器化 | Dockerfile（multi-stage build）+ Docker Compose |
+| CI | GitHub Actions（build + `dotnet test` + 映像建置驗證） |
 | 單元測試 | NUnit 3.14 + Moq 4.20 |
 | 參數驗證 | FluentValidation 12 + 自訂 `ValidationFilter` |
 | 錯誤處理 | `IExceptionHandler` + RFC 7807 `ProblemDetails` |
@@ -90,63 +93,75 @@ flowchart TD
 
 ### 前置需求
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)（用於啟動 SQL Server）
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — 啟動 API 與 SQL Server
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) — 建立資料表、跑測試、本機開發時需要
 - EF Core CLI：`dotnet tool install --global dotnet-ef --version 8.*`
 - 一組 Riot API Key（[開發者平台](https://developer.riotgames.com/) 申請，**開發用金鑰 24 小時失效**）
 
-### 1. 啟動資料庫
+### 1. 填入環境變數
 
 ```bash
-cp .env.example .env       # 填入 MSSQL_SA_PASSWORD（需含大小寫、數字、符號）
-docker compose up -d
-docker compose ps          # 等到 mssql 狀態為 (healthy)
+cp .env.example .env
 ```
 
-> `.env` 已列入 `.gitignore`。密碼請避開 `#`、`$`（`.env` 的註解與變數展開符號）以及 `;`（連線字串分隔符）。
+填入 `MSSQL_SA_PASSWORD` 與 `RIOT_API_KEY`。
 
-### 2. 設定機密
+> `.env` 已列入 `.gitignore`，且**不會進入映像**。密碼請避開 `#`、`$`（`.env` 的註解與變數展開符號）以及 `;`（連線字串分隔符）。
 
-API Key 與連線字串 **不進版控**。`appsettings.json` 中的 `RiotApi:ApiKey` 一律留空，實際值放在下列任一處：
+### 2. 啟動（API + SQL Server）
+
+```bash
+docker compose up -d --build
+docker compose ps            # 兩個服務都要 Up，mssql 需為 (healthy)
+```
+
+`api` 服務會等到 `mssql` 通過 healthcheck 才啟動（`depends_on` + `condition: service_healthy`）——「容器已啟動」不等於「資料庫可接受連線」，SQL Server 冷啟動約需十餘秒。
+
+### 3. 建立資料表（僅首次）
+
+Migration **不會**在容器啟動時自動執行（理由見 [設計決策 #8](#8-容器化把環境差異擋在映像之外)）。首次啟動需從主機執行一次：
 
 ```bash
 cd LolTeamTracker.Api
 dotnet user-secrets init
-
-dotnet user-secrets set "RiotApi:ApiKey" "RGAPI-你的金鑰"
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
   "Server=localhost,1434;Database=LolTeamTracker;User Id=sa;Password=你的密碼;TrustServerCertificate=True"
-```
 
-User Secrets 存放於專案資料夾**之外**（`%APPDATA%\Microsoft\UserSecrets\`），因此不可能誤入版控。容器與正式環境改用環境變數（`ConnectionStrings__DefaultConnection`）。
-
-> `TrustServerCertificate=True` 是**本機開發的妥協** — Docker 內的 SQL Server 使用自簽憑證。正式環境應安裝受信任的憑證，否則等同「加密但不驗證對方身分」。
-
-### 3. 建立資料表
-
-```bash
 dotnet ef database update
 ```
 
-### 4. 啟動 API
+> 注意 `Server=localhost,1434`——這是**從主機連**的位址。API 容器內部走的是 `Server=mssql,1433`（compose 服務名 + 容器內部 port），兩者指向同一個資料庫。
+
+### 4. 開啟
+
+- Swagger UI — <http://localhost:8080/swagger>
+- ReDoc — <http://localhost:8080/redoc>
+
+---
+
+### 本機開發模式（不透過容器跑 API）
+
+改程式時通常只用容器跑資料庫，API 直接在主機執行以便中斷點除錯：
 
 ```bash
-dotnet restore
-dotnet run --project LolTeamTracker.Api
+docker compose up -d mssql       # 只起資料庫
+
+cd LolTeamTracker.Api
+dotnet user-secrets set "RiotApi:ApiKey" "RGAPI-你的金鑰"
+dotnet run
 ```
 
-啟動後開啟：
+此模式的機密來自 **User Secrets**（`%APPDATA%\Microsoft\UserSecrets\`），位於專案資料夾**之外**，因此不可能誤入版控。容器模式則改用環境變數（`ConnectionStrings__DefaultConnection`、`RiotApi__ApiKey`）——同一個組態鍵，不同來源。
 
-- Swagger UI — `https://localhost:{port}/swagger`
-- ReDoc — `https://localhost:{port}/redoc`
+> `TrustServerCertificate=True` 是**本機開發的妥協** — Docker 內的 SQL Server 使用自簽憑證。正式環境應安裝受信任的憑證，否則等同「加密但不驗證對方身分」。
 
-### 5. 執行測試
+### 執行測試
 
 ```bash
 dotnet test
 ```
 
-測試**不需要**資料庫或 Riot API Key —— 外部依賴一律由測試替身取代（見 [設計決策 #7](#7-測試以介面邊界隔離外部依賴)）。
+測試**不需要**資料庫、容器或 Riot API Key —— 外部依賴一律由測試替身取代（見 [設計決策 #7](#7-測試以介面邊界隔離外部依賴)）。這也是同一套測試能在 CI 上直接跑的原因：GitHub Actions 的 runner 沒有資料庫，也沒有金鑰。
 
 ### 戰隊名單
 
@@ -355,6 +370,22 @@ Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
 
 **目前覆蓋範圍（誠實列出）**：僅 `MatchAnalyzer` 的欄位解析、CS 計算與時區轉換。`Controllers/`、`Repositories/`、`GlobalExceptionHandler` 尚無測試，整合測試（`WebApplicationFactory`）亦未導入。
 
+**覆蓋率高不等於測得夠。** `GetLaneName` 的六個 `[TestCase]` 全綠、`default` 分支也被涵蓋，但真實資料裡大亂鬥的 `teamPosition` 是**空字串**，這個輸入從未被試過，直到容器跑起來看實際回應才發現輸出成了「未知路線 ()」。覆蓋率量的是**哪幾行程式碼被執行**，不是**哪些輸入被試過**——同一行程式碼餵不同的值會有不同結果，工具看起來卻一模一樣。修正後空字串已獨立成一個 case（「Riot 沒給值」與「給了值但不認得」是兩種該分開處理的情況），並補上對應測試。
+
+### 8. 容器化：把環境差異擋在映像之外
+
+**Multi-stage build**：`sdk:8.0` 負責建置，最終映像用 `aspnet:8.0`——編譯器、SDK 與原始碼都不會進入執行環境。`.csproj` 先單獨 `COPY` 再 `restore`，讓套件還原這層能被 layer cache 命中，改一行程式碼不必重新下載套件。
+
+**機密一律不進映像。** `.dockerignore` 排除 `.env` 與 `appsettings.Development.json`，API Key 與連線字串只能從環境變數注入。
+
+> 這不只是資安考量，更是**「同一份映像跑遍所有環境」的前提**。機密一旦烤進映像，測試機與正式機就必須各建一份，容器化最大的價值就沒了。傳遞鏈是：`.env` →（compose 做字串替換）→ 容器環境變數 → ASP.NET Core 組態的第 4 層。`.env` 本身從未進入容器。
+
+**時區資料庫需另行安裝。** `TimeZoneInfo.FindSystemTimeZoneById("Taipei Standard Time")` 使用 Windows 格式的時區 ID，原本預期在 Linux 容器中會失敗，**實測結果是可以正常運作**——.NET 6 起在 Unix 上同時接受 Windows 與 IANA 兩種 ID，透過 ICU 對應。真正的必要條件是映像內要有時區資料庫，而 `mcr.microsoft.com/dotnet/aspnet` 預設不含，因此 Dockerfile 中安裝了 `tzdata`。
+
+> 值得記錄的是它**不會靜默退回 UTC**——對應不到就直接拋 `TimeZoneNotFoundException`。所以「查詢回 200」本身即可證明對應成功，不需要另外比對時間值。
+
+**Migration 不在容器啟動時自動執行。** 可以在 `Program.cs` 呼叫 `Database.Migrate()` 讓應用程式自行套用結構變更，但這代表**應用程式的執行身分需具備 DDL 權限**，且多個實例同時啟動時會競爭。本專案維持手動執行；正式環境的做法見 [設計決策 #6](#6-資料庫與-entity-設計)。
+
 ---
 
 ## 目前狀態與 Roadmap
@@ -367,11 +398,11 @@ Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
 | 全域例外處理 | ✅ 完成 | |
 | FluentValidation | ✅ 完成 | |
 | 結構化日誌 | ✅ 完成 | |
-| Docker Compose（本機） | ✅ 完成 | 一行指令啟動 SQL Server，含 healthcheck 與資料持久化 volume |
 | **EF Core + SQL Server** | ✅ 完成 | Entity、`DbContext`、Migration、資料表完成；`ITeamRepository` 的實作已由 JSON 切換至 `EfTeamRepository` |
-| **單元測試** | 🚧 進行中 | NUnit + Moq 已建置，目前僅涵蓋 `MatchAnalyzer`；Controller / Repository / 整合測試尚未導入 |
+| **API 容器化** | ✅ 完成 | Multi-stage Dockerfile；`docker compose up -d --build` 一行啟動 API + SQL Server，含 healthcheck、啟動順序控制與資料持久化 volume |
+| **單元測試** | 🚧 進行中 | NUnit + Moq 已建置，13 個測試涵蓋 `MatchAnalyzer`；Controller / Repository / 整合測試尚未導入 |
 | **強型別 DTO** | 🔜 規劃中 | 目前 Riot 回應以 `JsonElement` 傳遞，`GetProperty("x")` 散落在 Service 層。改成 DTO 後，欄位缺漏會在反序列化邊界就失敗，而不是在邏輯深處才 runtime 爆炸 |
-| API 容器化 | 🔜 規劃中 | 目前 compose 只含資料庫，API 尚未容器化 |
+| **CI（GitHub Actions）** | ✅ 完成 | 兩個 job：`restore` → `build` → `test`（Release），以及 Dockerfile 建置驗證。push 與 pull request 皆觸發 |
 | 快取（Cache-Aside） | 🔜 規劃中 | Riot API 有速率限制，重複查詢應快取 |
 
 ### 已知限制
@@ -382,7 +413,8 @@ Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
 - **`Puuid` 並非永久識別碼**。實測發現既有六筆資料的 puuid 全部與現行查詢結果不符（同一支金鑰重查得到相同新值，可排除「與金鑰綁定」的假設），推測 Riot 曾做過系統性遷移。因此 `Puuid` 在本專案的定位是**可能過期的快取**，真正的身分是自增 `Id`；upsert 會先以 puuid 查詢，找不到再以 `GameName + TagLine` 查詢並更新 puuid
 - 尚未導入重試 / 熔斷機制（Polly），遇到 Riot API 暫時性失敗不會自動重試
 - 測試僅涵蓋 `MatchAnalyzer`，且尚無整合測試——實際的 HTTP 管線（路由、驗證 filter、例外處理）未被測試覆蓋
-- **時區轉換使用 Windows 專屬的時區 ID（`"Taipei Standard Time"`）**，在 Linux 容器中會拋 `TimeZoneNotFoundException`。API 容器化時需一併處理
+- **`Data/Static/` 的靜態資料存在容器可寫層**，容器重建即遺失，需重新呼叫 `download-all-json`。目前刻意不掛 volume——這份資料隨時可從 Data Dragon 重新取得，性質上是快取而非需要保全的資料，代價是換取容器的無狀態性
+- **容器僅提供 HTTP（`8080`），無 HTTPS**。容器內沒有開發憑證，TLS 終結應由反向代理或雲端平台負責，這是容器化服務的常見做法
 
 ---
 
@@ -403,11 +435,16 @@ LolTeamTracker.Api/
 ├── Validators/       # FluentValidation 規則
 ├── Middleware/       # GlobalExceptionHandler
 ├── Filters/          # ValidationFilter
+├── Dockerfile        # Multi-stage build（sdk 建置 → aspnet 執行）
 └── Docs/             # 架構文件與改造記錄
 
 LolTeamTracker.Tests/
 └── Services/         # MatchAnalyzerTests — 以 Moq 替換 IRiotApiClient
 
-docker-compose.yml    # 本機開發環境（SQL Server）
+.github/workflows/
+└── ci.yml            # build + test + 映像建置驗證
+
+docker-compose.yml    # 本機開發環境（API + SQL Server）
+.dockerignore         # 必須位於 build context 根目錄，否則不生效
 .env.example          # 環境變數範本
 ```

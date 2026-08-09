@@ -1,0 +1,52 @@
+name: CI
+
+# 什麼時候跑：
+#   push 到 main —— 確保主線永遠是可建置、測試通過的狀態
+#   pull_request —— 在合併「之前」就知道會不會壞，而不是合併之後才發現
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          # 指定 8.0.x 而不是讓 runner 用預設版本。
+          # 本機 SDK 是 10.x，若 CI 用了不同版本，「本機過但 CI 掛」會很難查。
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        # --no-restore：上一步已經還原過了。若這裡又還原一次，
+        # 代表上一步的產物沒被沿用——用旗標讓「步驟被跳過」直接變成錯誤。
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        # --no-build：測的必須是上一步「剛建好的那份」，不是重新編一次的另一份。
+        # 測試不需要資料庫、容器或 Riot API Key——外部依賴全部由 Moq 取代。
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        # 驗證 Dockerfile 本身建得起來。
+        # context 是方案根目錄（.），與本機一致——這是 build context 的常見踩雷點。
+        run: docker build -f LolTeamTracker.Api/Dockerfile -t lol-team-tracker-api:ci .

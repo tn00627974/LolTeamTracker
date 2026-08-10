@@ -16,6 +16,17 @@ namespace LolTeamTracker.Api.Controllers
         }
 
         /// <summary>
+        /// 查詢戰隊成員名單
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet("me")]
+        public async Task<IActionResult> GetUserTeam() // TODO : 之後改為 UserId (依照登入者) 來查詢戰隊成員
+        {
+            var results = await _teamService.GetUserTeamAsync();
+            return Ok(results);
+        }
+
+        /// <summary>
         /// 將玩家加入戰隊名單（已存在則更新名稱）
         /// </summary>
         /// <remarks>

@@ -4,6 +4,10 @@ namespace LolTeamTracker.Api.Repositories
 {
     public interface ITeamRepository
     {
+        /// <summary>
+        /// 提供對玩家資訊的查詢方法。
+        /// </summary>
+        /// <returns></returns>
         Task<List<PlayerInfo>> LoadTeamFromDataAsync();
 
         /// <summary>

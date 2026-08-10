@@ -1,4 +1,5 @@
 using LolTeamTracker.Api.Clients;
+using LolTeamTracker.Api.Models;
 using LolTeamTracker.Api.Repositories;
 
 namespace LolTeamTracker.Api.Services
@@ -23,12 +24,16 @@ namespace LolTeamTracker.Api.Services
             _logger = logger;
         }
 
+        public async Task<List<PlayerInfo>> GetUserTeamAsync() // TODO : 之後改為 UserId (依照登入者 , 接GoogleOauth登入?) 來查詢戰隊成員
+        {
+            return await _teamRepository.LoadTeamFromDataAsync();
+        }
+
         public async Task UpsertMemberAsync(string gameName, string tagLine)
         {
             string puuid = await _riotApiClient.GetPuuidAsync(gameName, tagLine);
             await _teamRepository.UpsertPlayerAsync(puuid,gameName, tagLine);
             _logger.LogInformation("已更新戰隊成員 {GameName}#{TagLine}", gameName, tagLine);
-
         }
     }
 }

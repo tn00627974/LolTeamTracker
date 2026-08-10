@@ -21,6 +21,10 @@ namespace LolTeamTracker.Api.Repositories
             _db = db;
         }
 
+        /// <summary>
+        /// 取得戰隊成員資料，並轉換為 PlayerInfo 型別的 List。
+        /// </summary>
+        /// <returns></returns>
         public async Task<List<PlayerInfo>> LoadTeamFromDataAsync()
         {
             return await _db.Players
@@ -33,6 +37,15 @@ namespace LolTeamTracker.Api.Repositories
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// 修改更新指定玩家資料，
+        /// 1. 若資料庫中找不到該玩家，則新增一筆資料。
+        /// 2. 若資料庫中找得到該玩家，則更新該筆資料。
+        /// </summary>
+        /// <param name="puuid"></param>
+        /// <param name="gameName"></param>
+        /// <param name="tagLine"></param>
+        /// <returns></returns>
         public async Task UpsertPlayerAsync(string puuid, string gameName, string tagLine)
         {
             var player = await _db.Players.SingleOrDefaultAsync(p => p.Puuid == puuid );
@@ -59,7 +72,7 @@ namespace LolTeamTracker.Api.Repositories
                 player.TagLine = tagLine;
                 player.UpdatedAt = DateTime.UtcNow;
             }
-                await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync();
         }
     }
 }

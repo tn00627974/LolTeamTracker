@@ -1,6 +1,6 @@
 # LolTeamTracker
 
-[![CI](https://github.com/tn00627974/RiotAPI/actions/workflows/ci.yml/badge.svg)](https://github.com/tn00627974/RiotAPI/actions/workflows/ci.yml)
+[![CI](https://github.com/tn00627974/LolTeamTracker/actions/workflows/ci.yml/badge.svg)](https://github.com/tn00627974/LolTeamTracker/actions/workflows/ci.yml)
 
 > 串接 Riot Games API 的英雄聯盟戰隊戰績分析後端服務，以 ASP.NET Core 8 實作。
 
@@ -202,9 +202,12 @@ dotnet test
 
 | Method | 路徑 | 說明 |
 |---|---|---|
+| `GET` | `/api/team/me` | 查詢戰隊成員名單（`GameName` / `TagLine`）。名單為空時回 `200` 與空陣列 |
 | `PUT` | `/api/team/members` | 以 Riot ID 新增成員；已存在則更新名稱。成功回 `204 No Content` |
 
 > 用 `PUT` 而非 `POST`：本操作**冪等**——以相同參數呼叫多次的結果，與呼叫一次相同，因此重試是安全的。回 `204` 而非 `200`，因為沒有內容可回，`200` 在語意上暗示 body 有東西。
+
+> 查無成員時回 `200` 與 `[]`，不是 `404`：「集合是空的」與「這個資源不存在」是不同的事，用 `404` 會讓呼叫端誤判成路徑寫錯。
 
 ### `RiotController` — Riot API 代理與靜態資料
 
@@ -415,6 +418,8 @@ Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
 - 測試僅涵蓋 `MatchAnalyzer`，且尚無整合測試——實際的 HTTP 管線（路由、驗證 filter、例外處理）未被測試覆蓋
 - **`Data/Static/` 的靜態資料存在容器可寫層**，容器重建即遺失，需重新呼叫 `download-all-json`。目前刻意不掛 volume——這份資料隨時可從 Data Dragon 重新取得，性質上是快取而非需要保全的資料，代價是換取容器的無狀態性
 - **容器僅提供 HTTP（`8080`），無 HTTPS**。容器內沒有開發憑證，TLS 終結應由反向代理或雲端平台負責，這是容器化服務的常見做法
+- **只有 CI，尚未實作 CD**。workflow 驗證 build / test / 映像建置，但不部署。未做線上部署的主因是 Riot 的開發用金鑰 24 小時失效，公開 demo 隔天即失效；要提供穩定的 demo 需先實作一個回傳固定 fixture 的 `IRiotApiClient` 替代實作，以環境變數切換
+- **現行 CI 是「通知」而非「門禁」**。`on: push` 在推送發生**之後**才觸發，擋不住任何東西；PR 上的紅燈預設也不阻擋合併。要真正擋住需啟用分支保護的 required status checks——單人專案未啟用，是為了避免每次改動都得開 PR 的摩擦，但團隊的 main 分支應該要開
 
 ---
 

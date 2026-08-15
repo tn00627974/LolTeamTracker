@@ -119,3 +119,7 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 app.Run();
+
+// top-level statement 產生的 Program 類別預設是 internal，
+// WebApplicationFactory<Program> 要從 Tests 專案連進來，需要一個 public 的進入點。
+public partial class Program { }

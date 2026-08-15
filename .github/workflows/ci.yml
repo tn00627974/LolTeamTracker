@@ -14,6 +14,24 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
 
+    # 整合測試 SQL Server。runner 是一台乾淨的 ubuntu，
+    # 所以在這裡起一個 service container——生命週期跟這個 job 綁在一起，job 結束就銷毀。
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
+        ports:
+          # runner 很乾淨，1433 沒被佔用，不必像本機那樣改成 1434
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P '${{ secrets.MSSQL_SA_PASSWORD }}' -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +53,17 @@ jobs:
 
       - name: Test
         # --no-build：測的必須是上一步「剛建好的那份」，不是重新編一次的另一份。
-        # 測試不需要資料庫、容器或 Riot API Key——外部依賴全部由 Moq 取代。
+        #
+        # 單元測試 用 Moq 隔離外部依賴，不需要任何環境；
+        # 整合測試 要碰真的 SQL Server，連線字串由下面的 env 提供。
+        env:
+          # 只把「密碼」放 secret，連線字串在這裡組。
+          # 若整串連線字串都當 secret，密碼會同時存在 secret 和 service container 兩處，
+          # 改密碼必然漏掉一邊——跟本機只留一份 .env 是同一個道理。
+          #
+          # 本機走 .env（TestWebApplicationFactory 自己讀），CI 上沒有 .env，
+          # 所以走環境變數這條路——這就是那個 fallback 存在的理由。
+          LOLTEAMTRACKER_TEST_DB: "Server=localhost,1433;Database=LolTeamTracker_Test;User Id=sa;Password=${{ secrets.MSSQL_SA_PASSWORD }};TrustServerCertificate=True"
         run: dotnet test --no-build --configuration Release --verbosity normal
 
   docker:

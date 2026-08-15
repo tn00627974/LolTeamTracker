@@ -63,7 +63,7 @@ jobs:
           #
           # 本機走 .env（TestWebApplicationFactory 自己讀），CI 上沒有 .env，
           # 所以走環境變數這條路——這就是那個 fallback 存在的理由。
-          LOLTEAMTRACKER_TEST_DB: "Server=localhost,1433;Database=LolTeamTracker_Test;User Id=sa;Password=${{ secrets.MSSQL_SA_PASSWORD }};TrustServerCertificate=True"
+          LOLTEAMTRACKER_TEST_DB: "Server=localhost,1434;Database=LolTeamTracker_Test;User Id=sa;Password=${{ secrets.MSSQL_SA_PASSWORD }};TrustServerCertificate=True"
         run: dotnet test --no-build --configuration Release --verbosity normal
 
   docker:

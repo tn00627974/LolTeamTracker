@@ -23,10 +23,14 @@ jobs:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
         ports:
-          # runner 很乾淨，1433 沒被佔用，不必像本機那樣改成 1434
-          - 1433:1433
+          # 跟本機 compose 用同一組對應。引號不能省：
+          # YAML 會把沒引號的 1434:1433 解析成六十進位數字，不是字串。
+          - "1434:1433"
+        # 注意 $MSSQL_SA_PASSWORD 不是 GitHub Actions 表達式，是「容器內 shell 的變數」。
+        # options 欄位不允許 ${{ secrets.* }}（GitHub 限制，怕 secret 出現在 docker 指令列），
+        # 但 healthcheck 本來就在容器裡執行，直接讀上面 env 設進去的那個變數即可。
         options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P '${{ secrets.MSSQL_SA_PASSWORD }}' -C -Q 'SELECT 1'"
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $MSSQL_SA_PASSWORD -C -Q 'SELECT 1'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10

@@ -7,12 +7,14 @@ namespace LolTeamTracker.Api.Models.Entities
     /// </summary>
     public class MatchPlayer
     {
+        /// <summary>自動遞增主鍵。</summary>
         public int Id { get; set; }
 
+        /// <summary>外鍵欄位必填：關聯 Match（比賽編號）。</summary>
         public string MatchId { get; set; } = string.Empty;
 
         /// <summary>
-        /// 關聯到 <see cref="Player.Id"/>（代理鍵），不是 puuid 也不是 GameName。
+        /// 外鍵欄位必填：關聯 Player（玩家 Id，代理鍵），不是 puuid 也不是 GameName。
         /// 理由：那兩個都會變。用會變的值當關聯，改名或 Riot 遷移後歷史資料就對不上了。
         /// </summary>
         public int PlayerId { get; set; }
@@ -23,10 +25,16 @@ namespace LolTeamTracker.Api.Models.Entities
         /// </summary>
         public int ChampionId { get; set; }
 
+        /// <summary>KDA 統計：擊殺數必填。</summary>
         public int Kills { get; set; }
+
+        /// <summary>KDA 統計：陣亡數必填。</summary>
         public int Deaths { get; set; }
+
+        /// <summary>KDA 統計：助攻數必填。</summary>
         public int Assists { get; set; }
 
+        /// <summary>比賽結果必填：是否勝利。</summary>
         public bool Win { get; set; }
 
         /// <summary>
@@ -39,12 +47,21 @@ namespace LolTeamTracker.Api.Models.Entities
         /// </remarks>
         public string TeamPosition { get; set; } = string.Empty;
 
+        /// <summary>補刀統計必填：路線補刀。</summary>
         public int LaneCS { get; set; }
+
+        /// <summary>補刀統計必填：叢林補刀。</summary>
         public int JungleCS { get; set; }
 
+        /// <summary>經濟統計必填：總金錢。</summary>
         public int Gold { get; set; }
 
+        public DateTime GameDate { get; set; }
+
+        /// <summary>時間戳記必填：建立時間。</summary>
         public DateTime CreatedAt { get; set; }
+
+        /// <summary>時間戳記必填：最後更新時間。</summary>
         public DateTime UpdatedAt { get; set; }
 
         /// <summary>導覽屬性：這筆表現所屬的比賽。</summary>

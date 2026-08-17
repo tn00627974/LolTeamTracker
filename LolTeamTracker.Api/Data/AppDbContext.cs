@@ -16,6 +16,9 @@ namespace LolTeamTracker.Api.Data
         }
 
         public DbSet<Player> Players { get; set; } = null!;
+        public DbSet<Match> Matches { get; set; } = null!;
+        public DbSet<MatchPlayer> MatchPlayers { get; set; } = null!;
+        public DbSet<QueueDefinition> QueueDefinitions { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -46,6 +49,84 @@ namespace LolTeamTracker.Api.Data
                 // Riot ID 查詢與避免重複
                 entity.HasIndex(e => new { e.GameName, e.TagLine })
                       .IsUnique();
+            });
+
+            modelBuilder.Entity<Match>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasMaxLength(30);
+                entity.Property(e => e.QueueId).IsRequired();
+                entity.Property(e => e.GameDate).IsRequired();
+                entity.Property(e => e.GameDuration);
+                entity.Property(e => e.CreatedAt)
+                      .IsRequired();
+                entity.Property(e => e.UpdatedAt)
+                      .IsRequired();
+
+                // 與 QueueDefinition 的外鍵關係
+                entity.HasOne(m => m.Queue)
+                      .WithMany(q => q.Matches)
+                      .HasForeignKey(m => m.QueueId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<MatchPlayer>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.MatchId).HasMaxLength(30);
+                entity.Property(e => e.PlayerId).IsRequired();
+
+                entity.Property(e => e.ChampionId).IsRequired();
+                entity.Property(e => e.TeamPosition).HasMaxLength(10);
+                entity.Property(e => e.Kills).IsRequired();
+                entity.Property(e => e.Deaths).IsRequired();
+                entity.Property(e => e.Assists).IsRequired();
+                entity.Property(e => e.Win).IsRequired();
+                entity.Property(e => e.LaneCS).IsRequired();
+                entity.Property(e => e.JungleCS).IsRequired();
+                entity.Property(e => e.Gold).IsRequired();
+                entity.Property(e => e.GameDate).IsRequired();
+
+                entity.Property(e => e.CreatedAt)
+                        .IsRequired();
+
+                entity.Property(e => e.UpdatedAt)
+                      .IsRequired();
+
+                // 與 Match 的外鍵關係
+                entity.HasOne(mp => mp.Match)
+                      .WithMany(mp => mp.Participants)
+                      .HasForeignKey(mp => mp.MatchId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // 與 Player 的外鍵關係
+                entity.HasOne(mp => mp.Player)
+                      .WithMany()
+                      .HasForeignKey(mp => mp.PlayerId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // 避免重複 :  MatchId + PlayerId （同一場比賽同一個玩家只能有一筆紀錄）
+                entity.HasIndex(e => new { e.MatchId, e.PlayerId })
+                      .IsUnique();
+
+                // 效能：服務「查某人最近 N 場」—— 反正規化 GameDate 的全部理由
+                entity.HasIndex(e => new { e.PlayerId, e.GameDate });
+            });
+
+            modelBuilder.Entity<QueueDefinition>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).ValueGeneratedNever(); // 自訂義Id : 如 420 , 440
+
+                entity.Property(e => e.Name)
+                      .HasMaxLength(50)
+                      .IsRequired();
+
+                entity.Property(e => e.Description)
+                      .HasMaxLength(255);
+
+                entity.Property(e => e.UpdatedAt)
+                      .IsRequired();
             });
         }
     }

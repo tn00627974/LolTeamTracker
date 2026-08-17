@@ -78,8 +78,8 @@ flowchart TD
 | 資料存取 | EF Core 8（Code First + Migration） |
 | 資料庫 | SQL Server 2022 |
 | 容器化 | Dockerfile（multi-stage build）+ Docker Compose |
-| CI | GitHub Actions（build + `dotnet test` + 映像建置驗證） |
-| 單元測試 | NUnit 3.14 + Moq 4.20 |
+| CI | GitHub Actions（build + 測試 + 映像建置驗證，含 SQL Server service container） |
+| 測試 | NUnit 3.14 + Moq 4.20（單元）、`Microsoft.AspNetCore.Mvc.Testing`（整合） |
 | 參數驗證 | FluentValidation 12 + 自訂 `ValidationFilter` |
 | 錯誤處理 | `IExceptionHandler` + RFC 7807 `ProblemDetails` |
 | 日誌 | `Microsoft.Extensions.Logging` + message template 結構化欄位 |
@@ -158,14 +158,31 @@ dotnet run
 ### 執行測試
 
 ```bash
+docker compose up -d mssql   # 整合測試需要真實資料庫
 dotnet test
 ```
 
-測試**不需要**資料庫、容器或 Riot API Key —— 外部依賴一律由測試替身取代（見 [設計決策 #7](#7-測試以介面邊界隔離外部依賴)）。這也是同一套測試能在 CI 上直接跑的原因：GitHub Actions 的 runner 沒有資料庫，也沒有金鑰。
+14 個測試分成兩種性質，**它們對環境的需求完全不同**：
 
-### 戰隊名單
+| | 數量 | 外部依賴 | 驗證什麼 |
+|---|---|---|---|
+| 單元測試 | 13 | 無 —— `IRiotApiClient` 由 Moq 取代 | 商業邏輯：KDA 解析、時區轉換、批次容錯 |
+| 整合測試 | 1 | **真實 SQL Server** | Mock 測不到的：EF Core 產生的 SQL、資料庫約束擋不擋得住併發 |
 
-團隊成員資料表為 `Players`（`Puuid` 建有唯一索引）。資料存取層已由 JSON 檔案切換至 EF Core（`EfTeamRepository`），成員可透過 `PUT /api/team/members` 新增或更新。
+連線字串**不需要手動設定**：`TestWebApplicationFactory` 依序嘗試環境變數 `LOLTEAMTRACKER_TEST_DB`（CI 由 GitHub Secrets 注入）與專案根目錄的 `.env`（本機，與 docker compose 共用同一份密碼）。測試資料庫是獨立的 `LolTeamTracker_Test`，不會動到開發用的資料。
+
+CI 上則由 GitHub Actions 的 service container 提供 SQL Server（見 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)）。代價是 CI 從 37 秒變成約 2 分鐘 —— 換來的是「EF Core 產的 SQL 對不對」這件事每次推送都被驗證。
+
+### 資料表
+
+| 表 | 用途 | 關鍵約束 |
+|---|---|---|
+| `Players` | 戰隊成員 | `Puuid` 唯一索引；`(GameName, TagLine)` 唯一索引 |
+| `Matches` | 一場比賽本身（時間、模式、時長） | 主鍵是 Riot 的場次編號（自然鍵） |
+| `MatchPlayers` | 某位玩家在某場的表現（KDA、補刀、金錢） | `(MatchId, PlayerId)` 唯一索引防重複匯入；`(PlayerId, GameDate)` 服務「最近 N 場」查詢 |
+| `QueueDefinitions` | 遊戲模式對照表（queueId → 名稱） | 主鍵由 Riot 定義（420、440…），不自動遞增 |
+
+資料存取層已由 JSON 檔案切換至 EF Core（`EfTeamRepository`），成員可透過 `PUT /api/team/members` 新增或更新。
 
 ---
 
@@ -349,6 +366,35 @@ _logger.LogError(ex, "查詢比賽失敗。Player: {GameName}#{TagLine}, MatchId
 
 **Migration 不直接套用於正式環境**：`dotnet ef database update` 僅用於本機。正式環境應以 `dotnet ef migrations script --idempotent` 產生 SQL 交付審核——結構變更需要留存紀錄、可回溯，且應用程式的部署身分不應具備 DDL 權限。
 
+#### 比賽資料表：四個取捨
+
+**① 拆成 `Matches` 與 `MatchPlayers`，而非一張表存 JSON**
+
+Riot 的回應本身就分兩層：`info`（開賽時間、模式——一場一個）與 `participants[]`（KDA、補刀——一場十個）。塞進同一張表，同一場的 `GameDate` 會重複十次，且十份有機會不一致。
+
+曾考慮過只存 `(MatchId, 原始 JSON)` 當快取。**放棄的理由是：JSON 欄位無法 `WHERE`、無法建索引，`RANK() OVER (PARTITION BY ...)` 根本寫不出來。** 快取與分析是兩個需求，前者要「一坨就好」，後者要「拆成欄位」——它們會因為不同的原因而改變。
+
+**② `Matches` 用自然鍵，`Players` 用代理鍵——同一把尺，不同的結論**
+
+`Matches.Id` 直接使用 Riot 的場次編號。判準不是「自然鍵好或壞」，而是**這個值會不會變、寫入當下在不在**：比賽是已發生的歷史事實，兩者都滿足；puuid 是外部系統對「人」的當前識別，兩者都不滿足。
+
+**③ `MatchPlayers` 反正規化一份 `GameDate`**
+
+「查某人最近 20 場」需要 `ORDER BY GameDate`，但該欄位原本只在 `Matches`——排序得先 JOIN 完整個結果集才能取前 20 筆。在 `MatchPlayers` 複製一份，讓 `(PlayerId, GameDate)` 索引直接服務排序。
+
+> 反正規化的風險是兩份資料不同步，而**危險程度取決於那個欄位會不會變**。比賽時間寫入後永不更新，風險不存在；若複製的是 `Player.GameName`（會改名）就是災難。
+
+**④ 兩個索引，兩種性質**
+
+| 索引 | 性質 | Unique |
+|---|---|---|
+| `(MatchId, PlayerId)` | **正確性**——同一場的同一個人只能有一筆，重複代表匯入邏輯有 bug | ✅ |
+| `(PlayerId, GameDate)` | **效能**——讓「最近 N 場」不必排序，讀 20 筆就停 | ❌ |
+
+判準是：**這個組合重複了，是不是一定是 bug？** 是，才用唯一約束擋；不是（例如兩場比賽時間戳碰撞），就不該讓它中斷整批寫入。
+
+欄位順序也不是隨意的——索引是排好序的清單，`PlayerId` 必須在最左，同一位玩家的資料才會連續躺在一起。反過來寫成 `(GameDate, PlayerId)`，該玩家的資料會散落在整份索引各處，等同索引失效（**最左前綴原則**）。
+
 ### 7. 測試：以介面邊界隔離外部依賴
 
 **為什麼這個專案非測不可**：Riot 的開發用金鑰 24 小時失效，且 API 有速率限制。任何直接呼叫真實 API 的測試，隔天必定變成偽陽性失敗——**不穩定的測試比沒有測試更糟，因為團隊會開始習慣忽略紅燈。**
@@ -371,7 +417,11 @@ Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
 
 而不是在測試裡重跑一次 `TimeZoneInfo.ConvertTimeFromUtc(...)`。後者叫 **self-fulfilling test**——期望值用跟被測程式相同的邏輯算出來，被測邏輯改錯時期望值會跟著錯，測試永遠綠燈。**綠燈但驗不到東西，比紅燈危險，因為它提供的是虛假的安全感。**
 
-**目前覆蓋範圍（誠實列出）**：僅 `MatchAnalyzer` 的欄位解析、CS 計算與時區轉換。`Controllers/`、`Repositories/`、`GlobalExceptionHandler` 尚無測試，整合測試（`WebApplicationFactory`）亦未導入。
+**目前覆蓋範圍（誠實列出）**：13 個單元測試涵蓋 `MatchAnalyzer` 的欄位解析、CS 計算與時區轉換；1 個整合測試以 `WebApplicationFactory` 接真實 SQL Server。`Controllers/`、`GlobalExceptionHandler` 尚無測試。
+
+**為什麼還需要整合測試**：Moq 假造的 Repository 沒有唯一索引，也沒有併發寫入的概念——**要驗證的東西根本不在 mock 裡面**。那個測試讓兩個獨立的 `DbContext` 同時 upsert 相同的 puuid，斷言資料庫擋下第二筆（`DbUpdateException`，內層 `SqlException.Number` 為 2601/2627），且表中最終只有一列。
+
+> 這是在證明 README 裡反覆出現的那句話不是紙上談兵：**應用層的檢查是效能優化，資料庫約束才是正確性保證。** `UpsertPlayerAsync` 裡的 `if (player == null)` 在併發下兩邊都會判定「不存在」，真正擋住重複寫入的是唯一索引。
 
 **覆蓋率高不等於測得夠。** `GetLaneName` 的六個 `[TestCase]` 全綠、`default` 分支也被涵蓋，但真實資料裡大亂鬥的 `teamPosition` 是**空字串**，這個輸入從未被試過，直到容器跑起來看實際回應才發現輸出成了「未知路線 ()」。覆蓋率量的是**哪幾行程式碼被執行**，不是**哪些輸入被試過**——同一行程式碼餵不同的值會有不同結果，工具看起來卻一模一樣。修正後空字串已獨立成一個 case（「Riot 沒給值」與「給了值但不認得」是兩種該分開處理的情況），並補上對應測試。
 
@@ -403,10 +453,12 @@ Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
 | 結構化日誌 | ✅ 完成 | |
 | **EF Core + SQL Server** | ✅ 完成 | Entity、`DbContext`、Migration、資料表完成；`ITeamRepository` 的實作已由 JSON 切換至 `EfTeamRepository` |
 | **API 容器化** | ✅ 完成 | Multi-stage Dockerfile；`docker compose up -d --build` 一行啟動 API + SQL Server，含 healthcheck、啟動順序控制與資料持久化 volume |
-| **單元測試** | 🚧 進行中 | NUnit + Moq 已建置，13 個測試涵蓋 `MatchAnalyzer`；Controller / Repository / 整合測試尚未導入 |
+| **測試** | 🚧 進行中 | 13 個單元測試（NUnit + Moq）涵蓋 `MatchAnalyzer`；1 個整合測試接真實 SQL Server 驗證唯一索引擋得住併發寫入。`Controllers/`、`GlobalExceptionHandler` 尚無測試 |
+| **比賽資料落地** | 🚧 進行中 | `Matches` / `MatchPlayers` / `QueueDefinitions` 三張表、三個外鍵與兩個索引已建立；寫入邏輯與統計查詢尚未實作 |
 | **強型別 DTO** | 🔜 規劃中 | 目前 Riot 回應以 `JsonElement` 傳遞，`GetProperty("x")` 散落在 Service 層。改成 DTO 後，欄位缺漏會在反序列化邊界就失敗，而不是在邏輯深處才 runtime 爆炸 |
-| **CI（GitHub Actions）** | ✅ 完成 | 兩個 job：`restore` → `build` → `test`（Release），以及 Dockerfile 建置驗證。push 與 pull request 皆觸發 |
-| 快取（Cache-Aside） | 🔜 規劃中 | Riot API 有速率限制，重複查詢應快取 |
+| **CI（GitHub Actions）** | ✅ 完成 | 兩個 job：`restore` → `build` → `test`（Release，含 SQL Server service container），以及 Dockerfile 建置驗證。push 與 pull request 皆觸發 |
+| 快取（Cache-Aside） | 🔜 規劃中 | Riot 的限制是 **100 requests / 2 minutes**。一次團隊分析（10 人 × 每人 20 場）需要 210 次請求，光打 API 就要約 4 分鐘——**這是比賽資料必須落地的直接原因**，不是為了做而做 |
+| 非同步平行化 + 限流 | 🔜 規劃中 | 目前是序列 `foreach`，延遲線性累加（單次請求實測約 246ms）。去重可把 210 次降到約 110 次、平行化再把 27 秒壓到 3 秒——**兩者解決的是不同的瓶頸，順序不能顛倒**：請求數超過配額時，平行化毫無幫助 |
 
 ### 已知限制
 
@@ -415,7 +467,7 @@ Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
 - **`PlayerInfo` 未接住資料庫中既有的 `Puuid`**，導致每次查詢戰績都重新呼叫 API 取得已知的值；隊員數 N 就是 N 次多餘請求
 - **`Puuid` 並非永久識別碼**。實測發現既有六筆資料的 puuid 全部與現行查詢結果不符（同一支金鑰重查得到相同新值，可排除「與金鑰綁定」的假設），推測 Riot 曾做過系統性遷移。因此 `Puuid` 在本專案的定位是**可能過期的快取**，真正的身分是自增 `Id`；upsert 會先以 puuid 查詢，找不到再以 `GameName + TagLine` 查詢並更新 puuid
 - 尚未導入重試 / 熔斷機制（Polly），遇到 Riot API 暫時性失敗不會自動重試
-- 測試僅涵蓋 `MatchAnalyzer`，且尚無整合測試——實際的 HTTP 管線（路由、驗證 filter、例外處理）未被測試覆蓋
+- 測試涵蓋 `MatchAnalyzer` 與 `EfTeamRepository` 的併發寫入，但**實際的 HTTP 管線（路由、`ValidationFilter`、`GlobalExceptionHandler`）仍未被覆蓋**——現有的整合測試直接從 DI 容器解析 `ITeamRepository`，繞過了整條 middleware pipeline。要涵蓋那一層需改用 `_factory.CreateClient()` 打真實端點
 - **`Data/Static/` 的靜態資料存在容器可寫層**，容器重建即遺失，需重新呼叫 `download-all-json`。目前刻意不掛 volume——這份資料隨時可從 Data Dragon 重新取得，性質上是快取而非需要保全的資料，代價是換取容器的無狀態性
 - **容器僅提供 HTTP（`8080`），無 HTTPS**。容器內沒有開發憑證，TLS 終結應由反向代理或雲端平台負責，這是容器化服務的常見做法
 - **只有 CI，尚未實作 CD**。workflow 驗證 build / test / 映像建置，但不部署。未做線上部署的主因是 Riot 的開發用金鑰 24 小時失效，公開 demo 隔天即失效；要提供穩定的 demo 需先實作一個回傳固定 fixture 的 `IRiotApiClient` 替代實作，以環境變數切換
@@ -434,7 +486,7 @@ LolTeamTracker.Api/
 ├── Data/             # AppDbContext（EF Core）、靜態 JSON 資料
 ├── Migrations/       # EF Core 自動產生，勿手動修改
 ├── Models/
-│   ├── Entities/     # 資料庫 Entity（Player）
+│   ├── Entities/     # 資料庫 Entity（Player、Match、MatchPlayer、QueueDefinition）
 │   ├── Requests/     # API 輸入模型
 │   └── Results/      # API 回應 DTO（DownloadAllResult、MatchSummaryResult）
 ├── Validators/       # FluentValidation 規則
@@ -444,10 +496,12 @@ LolTeamTracker.Api/
 └── Docs/             # 架構文件與改造記錄
 
 LolTeamTracker.Tests/
-└── Services/         # MatchAnalyzerTests — 以 Moq 替換 IRiotApiClient
+├── Services/         # MatchAnalyzerTests — 以 Moq 替換 IRiotApiClient
+└── Integration/      # TestWebApplicationFactory + EfTeamRepositoryIntegrationTests
+                      #   接真實 SQL Server，驗證 Mock 測不到的資料庫約束
 
 .github/workflows/
-└── ci.yml            # build + test + 映像建置驗證
+└── ci.yml            # build + test（含 SQL Server service container）+ 映像建置驗證
 
 docker-compose.yml    # 本機開發環境（API + SQL Server）
 .dockerignore         # 必須位於 build context 根目錄，否則不生效

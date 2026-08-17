@@ -41,7 +41,7 @@ namespace LolTeamTracker.Api.Services
             if (participant.ValueKind == JsonValueKind.Undefined) // 如果找不到對應的參與者
                 return null;
 
-            var champion = participant.GetProperty("championName").GetString();
+            var champion = participant.GetProperty("championName").GetString() ?? "";
             var kills = participant.GetProperty("kills").GetInt32();
             var deaths = participant.GetProperty("deaths").GetInt32();
             var assists = participant.GetProperty("assists").GetInt32();

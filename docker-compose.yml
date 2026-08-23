@@ -11,6 +11,9 @@ services:
   mssql:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: lolteamtracker-mssql
+    # Docker 預設只等 10 秒就送 SIGKILL(容易發生Seed 跳號的問題)
+    # 被強制砍掉的結果就是重啟後 identity 跳號（實測跳到 1007、2007）。
+    stop_grace_period: 120s  # 給 SQL Server 足夠時間關閉避免跳號。
     environment:
       ACCEPT_EULA: "Y"
       # 密碼從 .env 讀取，不寫死在這個檔案裡——這個檔案要進版控

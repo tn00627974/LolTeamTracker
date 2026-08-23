@@ -1,6 +1,6 @@
-/*
-    開發環境測試資料：戰隊成員 6 筆
-    來源：LolTeamTracker.Api/Data/Team/team.json
+﻿/*
+    開發環境測試資料：戰隊成員 10 筆
+    來源：2026-08-23 自開發資料庫匯出的快照
 
     用途：本機重建資料庫後快速補回測試資料。
           僅供開發使用，正式環境的資料由應用程式新增流程寫入。
@@ -20,12 +20,16 @@ GO
 
 MERGE INTO Players AS target
 USING (VALUES
-    ('8t5ALvzYjyDOFxAGdYO9VKhS5D5JiDi35XrydaFMRjkCuYssmb6qhYqRCzBQCxR3XX7vI-U0aBqsKw', N'TheSky',     'tw2'),
-    ('bemk1rOXSFHkuJO2M8c6WjzGo0YL-g-BdtAMk6FdbjKho3-j69Y8rVYYPM1BJuUrpYZn-puUMwBPkQ', N'深邃紅月',   'tw2'),
-    ('H2DSiQOA5lssNrBQTXq76WnOLReUmgcQFxS7Y3i81AUE21URsL-d16yP719iQQ4KB7NroGqeYSDSYg', N'地瓜飛拳',   '0530'),
-    ('_ZUlG-3yvkXTyzwTJEDHeCIHppULJ3Wmgj7iGSOZAKGip4jQ5nz6cHxdbahg0VvfadFaCGjuKRFsMQ', N'艾藤o靜',    'tw2'),
-    ('4d6PYmIA95SI-RR4pIY2mveXE3k6b4vEul2I__Kl_AN8AIQ7VdYncfVmy2iTTpiyfd3fjmWONb_Nog', N'控肉精靈',   'tw2'),
-    ('MNIr03LV6IqLEjEWorQiur0eA2t7iiaOXMBJmou4auprFiwlCRHF69Zax96qaBxTPbCCYGi0hEgydA', N'微糖不會甜', '4206')
+    ('8t5ALvzYjyDOFxAGdYO9VKhS5D5JiDi35XrydaFMRjkCuYssmb6qhYqRCzBQCxR3XX7vI-U0aBqsKw', N'TheSky',        'tw2'),
+    ('bemk1rOXSFHkuJO2M8c6WjzGo0YL-g-BdtAMk6FdbjKho3-j69Y8rVYYPM1BJuUrpYZn-puUMwBPkQ', N'深邃紅月',      'tw2'),
+    ('lFtKQDDCadeftZryWXy_-EPfBtDDMV2DOkfVDCueq-cIR6c78ibFQO5x3B4DPJzfc0mbkRadYW9sxg', N'地瓜飛拳',      '0530'),
+    ('c7vZPnGeF9q_FABmZFLwfNTjAinKEh-1ZGK9KgmL0ovNiOFNeVlHPsMuULBugHKlSN_NWgXP2WywQg', N'艾藤o靜',       'TW2'),
+    ('4d6PYmIA95SI-RR4pIY2mveXE3k6b4vEul2I__Kl_AN8AIQ7VdYncfVmy2iTTpiyfd3fjmWONb_Nog', N'控肉精靈',      'tw2'),
+    ('MNIr03LV6IqLEjEWorQiur0eA2t7iiaOXMBJmou4auprFiwlCRHF69Zax96qaBxTPbCCYGi0hEgydA', N'微糖不會甜',    '4206'),
+    ('xEyeWRdZsZImovKyV3rhqTehAoBxV1IA6twFJnMgcmrKqpNiVAv_SQLHkQnKIoN6X9ThoZYDZ3IT9g', N'LeLeOuO',       '3105'),
+    ('k-Mb8BoDV2eS-6wKE3UMD-V5kAGlIVqyb4bhS1JbG7oVj1VuPnT18f9NTQ_El1gQWUrCH3LZHk3WlA', N'小鼠餅乾',      'Kurrx'),
+    ('ApM4DHIFCFvxICyQWq4nOx5kDqDq2WDIenkwAywDTrkGMcVxvak5Nlg3c6J8B8dCnQSYSDHtIJKOLg', N'飛吧ü手卷壽司', '0617'),
+    ('IlZe1QFHo7lInXlnwQz5AiRBPY1j4H2FN1l4jsIl4lNVNAUuBJDhQsHepPCb0do6HOYBcuC07yPRyA', N'來財鱔財',      '5590')
 ) AS source (Puuid, GameName, TagLine)
 ON target.Puuid = source.Puuid
 

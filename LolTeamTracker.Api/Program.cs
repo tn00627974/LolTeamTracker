@@ -66,6 +66,7 @@ builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<IStaticDataService, StaticDataService>();
 builder.Services.AddScoped<IDataDragonClient, DataDragonClient>();
 builder.Services.AddScoped<IStaticDataRepository, StaticDataRepository>();
+builder.Services.AddScoped<EfMatchPlayerRepository, EfMatchPlayerRepository>(); // TODO: 之後要改成 IMatchPlayerRepository
 
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle

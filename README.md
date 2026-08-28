@@ -226,6 +226,20 @@ CI 上則由 GitHub Actions 的 service container 提供 SQL Server（見 [`.git
 
 > 查無成員時回 `200` 與 `[]`，不是 `404`：「集合是空的」與「這個資源不存在」是不同的事，用 `404` 會讓呼叫端誤判成路徑寫錯。
 
+### `MatchStatsController` — 比賽統計分析
+
+| Method | 路徑 | 說明 |
+|---|---|---|
+| `GET` | `/api/matchstats/top-champions` | 每位成員最常玩的前三個英雄 |
+| `GET` | `/api/matchstats/best-combo-per-player` | 每位成員勝率最高的「英雄 + 路線」組合 |
+| `GET` | `/api/matchstats/best-champion-per-lane` | 每條路線勝率最高的英雄（樣本數 < 500 場不列入排名） |
+
+> **樣本門檻的理由**：比率型指標若不設下限，「打 1 場贏 1 場」會以 100% 勝率排在「打 3000 場贏 55%」之前。門檻要隨分組粒度調整——粒度越細，每組樣本越少。
+
+> **統計計算放在 `Repositories/` 而非 `Services/`**：判準是「這個計算能否脫離資料庫語法、單獨在 C# 重寫一份」。KDA 可以（拿到原始數字就能算）；英雄排名不行——25 萬列不可能全部載入記憶體，`GROUP BY` 與聚合必須發生在資料庫端，計算邏輯與查詢語法綁在一起。
+
+> **已知限制**：`RANK() OVER (PARTITION BY ...)` 無法被 EF Core 翻譯成 SQL，因此「每組取前 N 名」這一步是在 `ToList()` 之後於記憶體中完成。資料庫回傳的是「玩家 × 英雄」的完整組合而非最終的 30 列。以目前 10 位成員的規模可接受，資料量增長後應改用原生 SQL 或 `FromSqlRaw`。
+
 ### `RiotController` — Riot API 代理與靜態資料
 
 | Method | 路徑 | 說明 |

@@ -1,9 +1,10 @@
 using LolTeamTracker.Api.Data;
+using LolTeamTracker.Api.Models.Results;
 using Microsoft.EntityFrameworkCore;
 
 namespace LolTeamTracker.Api.Repositories
 {
-    public class EfMatchPlayerRepository
+    public class EfMatchPlayerRepository : IEfMatchPlayerRepository
     {
         private readonly AppDbContext _db;
 
@@ -16,7 +17,7 @@ namespace LolTeamTracker.Api.Repositories
         /// 每個隊員最常玩的前三個英雄
         /// </summary>
         /// <returns></returns>
-        public async Task<List<dynamic>> TopChampions()
+        public async Task<List<PlayerChampionStat>> TopChampions()
         {
             // 查詢 MatchPlayers 並依照玩家x英雄分類
             var query = _db.MatchPlayers.
@@ -42,9 +43,9 @@ namespace LolTeamTracker.Api.Repositories
                 .SelectMany(player => player
                     .OrderByDescending(x => x.Games)
                     .Take(3))
+                .Select(x => new PlayerChampionStat(x.PlayerId, x.ChampionId, x.Games))
                 .OrderBy(x => x.PlayerId)
                 .ThenByDescending(x => x.Games)
-                .Select(x => (dynamic)x)   // ← List<匿名型別> 不能直接當 List<dynamic> 回傳，要逐筆轉型
                 .ToList();
 
             return result;
@@ -54,7 +55,7 @@ namespace LolTeamTracker.Api.Repositories
         /// 每條路線勝率最高的英雄
         /// </summary>
         /// <returns></returns>
-        public async Task<List<dynamic>> TeamPositionHeroWinningRate()
+        public async Task<List<LaneBestChampionStat>> TeamPositionHeroWinningRate()
         {
             var query = _db.MatchPlayers
                 .GroupBy(g => new
@@ -80,8 +81,8 @@ namespace LolTeamTracker.Api.Repositories
                 .SelectMany(teamPosition => teamPosition
                     .OrderByDescending(x => x.WinRatePct)
                     .Take(1))
+                .Select(x => new LaneBestChampionStat(x.TeamPosition, x.ChampionId, x.Games, x.WinRatePct))
                 .OrderByDescending(x => x.WinRatePct)
-                .Select(x => (dynamic)x)
                 .ToList();
 
             return result;
@@ -92,7 +93,7 @@ namespace LolTeamTracker.Api.Repositories
         /// 每個隊員英雄 與 勝率最高的路線
         /// </summary>
         /// <returns></returns>
-        public async Task<List<dynamic>> PlayerTeamPositionHeroWinningRate()
+        public async Task<List<PlayerBestComboStat>> PlayerTeamPositionHeroWinningRate()
         {
             var query = _db.MatchPlayers
                 .GroupBy(g => new
@@ -119,8 +120,8 @@ namespace LolTeamTracker.Api.Repositories
                 .SelectMany(teamPosition => teamPosition
                     .OrderByDescending(x => x.WinRatePct)
                     .Take(1))
+                .Select(x => new PlayerBestComboStat(x.PlayerId, x.ChampionId, x.TeamPosition, x.Games, x.WinRatePct))
                 .OrderByDescending(x => x.WinRatePct)
-                .Select(x => (dynamic)x)
                 .ToList();
 
             return result;

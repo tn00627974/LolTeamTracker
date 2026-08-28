@@ -11,10 +11,9 @@ namespace LolTeamTracker.Api.Controllers
     [Route("api/[controller]")]
     public class MatchStatsController : Controller
     {
-        // TODO: 依賴具體類別而非介面（IMatchPlayerRepository 尚未抽出），先求動起來，之後補
-        private readonly EfMatchPlayerRepository _efMatchPlayerRepository;
+        private readonly IEfMatchPlayerRepository _efMatchPlayerRepository;
 
-        public MatchStatsController(EfMatchPlayerRepository efMatchPlayerRepository)
+        public MatchStatsController(IEfMatchPlayerRepository efMatchPlayerRepository)
         {
             _efMatchPlayerRepository = efMatchPlayerRepository;
         }

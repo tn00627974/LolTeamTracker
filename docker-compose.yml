@@ -7,6 +7,9 @@
 #   4. docker compose down      # 停止（資料保留在 volume）
 #      docker compose down -v   # 停止並刪除資料（連 volume 一起砍）
 
+# 容器名稱，沒設定則是是資料夾名稱當作容器名。
+name: lolteamtracker
+
 services:
   mssql:
     image: mcr.microsoft.com/mssql/server:2022-latest

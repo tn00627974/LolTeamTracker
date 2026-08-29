@@ -1,4 +1,4 @@
-using LolTeamTracker.Api.Models.Entities;
+﻿using LolTeamTracker.Api.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace LolTeamTracker.Api.Data
@@ -109,8 +109,14 @@ namespace LolTeamTracker.Api.Data
                 entity.HasIndex(e => new { e.MatchId, e.PlayerId })
                       .IsUnique();
 
-                // 效能：服務「查某人最近 N 場」—— 反正規化 GameDate 的全部理由
-                entity.HasIndex(e => new { e.PlayerId, e.GameDate });
+                // 效能：服務「查某人最近 N 場」—— 反正規化 GameDate 的全部理由。
+                // INCLUDE(MatchId) 讓這個索引「涵蓋」整個查詢，不必回主表撈欄位。
+                // 2026-08-22 實測（25 萬列，撈某玩家 26,373 筆）：
+                //   無索引            3,798 次邏輯讀取
+                //   有索引但要回表    1,051 次（執行計畫顯示 95% 成本在 Key Lookup）
+                //   涵蓋索引            151 次（執行計畫只剩一個 Index Seek）
+                entity.HasIndex(e => new { e.PlayerId, e.GameDate }) 
+                      .IncludeProperties(e => e.MatchId);
             });
 
             modelBuilder.Entity<QueueDefinition>(entity =>

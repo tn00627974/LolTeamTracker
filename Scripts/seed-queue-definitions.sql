@@ -39,7 +39,11 @@ FROM (VALUES
 ) AS v(Id, Name, Description)
 WHERE NOT EXISTS (SELECT 1 FROM QueueDefinitions q WHERE q.Id = v.Id);
 
-PRINT CONCAT('QueueDefinitions 目前共 ', (SELECT COUNT(*) FROM QueueDefinitions), ' 筆');
+-- PRINT 的參數只接受純量運算式，不能直接放子查詢（Msg 1046），
+-- 所以先把 COUNT(*) 存進變數。整個 batch 是一起編譯的——
+-- 這裡語法錯誤會讓上面的 INSERT 一併不執行。
+DECLARE @Cnt int = (SELECT COUNT(*) FROM QueueDefinitions);
+PRINT CONCAT('QueueDefinitions 目前共 ', @Cnt, ' 筆');
 GO
 
 SELECT Id, Name, Description FROM QueueDefinitions ORDER BY Id;

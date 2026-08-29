@@ -132,7 +132,49 @@ dotnet ef database update
 
 > 注意 `Server=localhost,1434`——這是**從主機連**的位址。API 容器內部走的是 `Server=mssql,1433`（compose 服務名 + 容器內部 port），兩者指向同一個資料庫。
 
-### 4. 開啟
+### 4. 灌入資料（選用）
+
+`Scripts/` 下有腳本，**執行順序不能顛倒**——外鍵依賴決定了先後：
+
+```
+seed-queue-definitions.sql  →  Matches 的 QueueId 外鍵指向它
+seed-players.sql            →  MatchPlayers 的 PlayerId 外鍵指向它
+seed-test-data.sql          →  10 萬場比賽 / 約 25 萬列參與紀錄
+```
+
+```powershell
+# 從 .env 讀密碼，避免寫在指令列留下歷史紀錄
+$pw = ((Get-Content .env | Where-Object { $_ -match '^MSSQL_SA_PASSWORD=' }) -replace '^MSSQL_SA_PASSWORD=','')
+
+docker cp Scripts/seed-queue-definitions.sql lolteamtracker-mssql:/tmp/
+docker cp Scripts/seed-players.sql           lolteamtracker-mssql:/tmp/
+docker cp Scripts/seed-test-data.sql         lolteamtracker-mssql:/tmp/
+
+docker exec lolteamtracker-mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$pw" -C -d LolTeamTracker -i /tmp/seed-queue-definitions.sql
+docker exec lolteamtracker-mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$pw" -C -d LolTeamTracker -i /tmp/seed-players.sql
+docker exec lolteamtracker-mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$pw" -C -d LolTeamTracker -i /tmp/seed-test-data.sql
+```
+
+| 腳本 | 性質 | 正式環境能跑嗎 |
+|---|---|---|
+| `seed-queue-definitions.sql` | **參照資料**（模式對照表） | ✅ 冪等新增，不刪任何東西 |
+| `seed-players.sql` | 測試資料（10 筆成員） | ⚠️ 僅開發用 |
+| `seed-test-data.sql` | 測試資料（25 萬列） | ❌ 會 TRUNCATE，有 `DB_NAME()` 檢查擋著 |
+
+> **為什麼結構走 Migration、資料走 SQL 腳本**：結構要版控、要能重現、要可回溯，這是 Migration 的職責；25 萬列的測試資料用 EF 的 `HasData` 並不合適。而參照資料與測試資料分成兩支腳本，用的是同一把尺——**參照資料正式環境必須有（沒有它模式名稱翻不出來），測試資料正式環境絕對不能有。**
+
+驗證資料量：
+
+```sql
+SELECT 'QueueDefinitions' AS T, COUNT(*) FROM QueueDefinitions
+UNION ALL SELECT 'Players',      COUNT(*) FROM Players
+UNION ALL SELECT 'Matches',      COUNT(*) FROM Matches
+UNION ALL SELECT 'MatchPlayers', COUNT(*) FROM MatchPlayers;
+```
+
+`Scripts/check-index-stats.sql` 可檢視索引的頁數、每列大小、碎片率——用來驗證涵蓋索引是否生效（見 [設計決策 #6](#6-資料庫與-entity-設計)）。
+
+### 5. 開啟
 
 - Swagger UI — <http://localhost:8080/swagger>
 - ReDoc — <http://localhost:8080/redoc>

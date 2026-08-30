@@ -268,6 +268,17 @@ CI 上則由 GitHub Actions 的 service container 提供 SQL Server（見 [`.git
 
 > 查無成員時回 `200` 與 `[]`，不是 `404`：「集合是空的」與「這個資源不存在」是不同的事，用 `404` 會讓呼叫端誤判成路徑寫錯。
 
+### `QueueDefinitionsController` — 遊戲模式對照表
+
+| Method | 路徑 | 說明 |
+|---|---|---|
+| `GET` | `/api/queuedefinitions` | 取得全部遊戲模式定義（queueId → 名稱） |
+| `POST` | `/api/queuedefinitions` | 新增一筆模式定義。已存在的 `Id` 會被忽略（冪等），一律回 `204 No Content` |
+
+> **這張表存在的理由**：`queueId` → 中文名稱的對照原本寫死在 `MatchAnalyzer` 的 `switch` 裡，Riot 新增模式（例如 870 人機、900 無限亂鬥）就得改程式碼重新部署。搬進資料表後，新增模式只要 `INSERT` 一列。**代價是這個方法不再是純函式**——換來的是不必為了一筆對照資料走一次部署流程。
+
+> **請求主體只收三個欄位**（`id` / `name` / `description`），不直接收 Entity。Entity 帶著 `Matches` 導覽屬性，開放給呼叫端等於允許連巢狀的 `Match`、`MatchPlayer`、`Player` 一起寫入（over-posting）。**Request Model 讓不該給的欄位在型別上就不存在**，而不是靠文件約定或執行期檢查。
+
 ### `MatchStatsController` — 比賽統計分析
 
 | Method | 路徑 | 說明 |
@@ -510,7 +521,9 @@ Assert.That(result!.GameDate, Is.EqualTo("2024/08/06 16:00:00"));
 | **EF Core + SQL Server** | ✅ 完成 | Entity、`DbContext`、Migration、資料表完成；`ITeamRepository` 的實作已由 JSON 切換至 `EfTeamRepository` |
 | **API 容器化** | ✅ 完成 | Multi-stage Dockerfile；`docker compose up -d --build` 一行啟動 API + SQL Server，含 healthcheck、啟動順序控制與資料持久化 volume |
 | **測試** | 🚧 進行中 | 13 個單元測試（NUnit + Moq）涵蓋 `MatchAnalyzer`；1 個整合測試接真實 SQL Server 驗證唯一索引擋得住併發寫入。`Controllers/`、`GlobalExceptionHandler` 尚無測試 |
-| **比賽資料落地** | 🚧 進行中 | `Matches` / `MatchPlayers` / `QueueDefinitions` 三張表、三個外鍵與兩個索引已建立；寫入邏輯與統計查詢尚未實作 |
+| **比賽資料落地** | 🚧 進行中 | 四張表、外鍵與索引已建立，統計查詢已完成（`MatchStatsController` 三個端點）；**寫入邏輯（Riot API → DB）尚未實作**，目前表中為 seed 產生的測試資料 |
+| **SQL 效能調校** | ✅ 完成 | 25 萬列實測：同一查詢 **3,798 → 1,051 → 151 次邏輯讀取**（無索引 / 有索引但回表 / 涵蓋索引）。含執行計畫判讀、`RANK() OVER` 窗函數、`sys.dm_db_index_physical_stats` 診斷腳本 |
+| **參照資料改由 DB 維護** | ✅ 完成 | `queueId` → 名稱的對照從寫死的 `switch` 改為 `QueueDefinitions` 資料表，新增模式只要 `INSERT` 一列。對照表於請求期間載入一次，避免在「每位隊員 × 每場比賽」的迴圈中產生 N+1 |
 | **強型別 DTO** | 🔜 規劃中 | 目前 Riot 回應以 `JsonElement` 傳遞，`GetProperty("x")` 散落在 Service 層。改成 DTO 後，欄位缺漏會在反序列化邊界就失敗，而不是在邏輯深處才 runtime 爆炸 |
 | **CI（GitHub Actions）** | ✅ 完成 | 兩個 job：`restore` → `build` → `test`（Release，含 SQL Server service container），以及 Dockerfile 建置驗證。push 與 pull request 皆觸發 |
 | 快取（Cache-Aside） | 🔜 規劃中 | Riot 的限制是 **100 requests / 2 minutes**。一次團隊分析（10 人 × 每人 20 場）需要 210 次請求，光打 API 就要約 4 分鐘——**這是比賽資料必須落地的直接原因**，不是為了做而做 |

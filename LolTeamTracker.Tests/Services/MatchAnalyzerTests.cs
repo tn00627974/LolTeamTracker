@@ -1,5 +1,6 @@
 using LolTeamTracker.Api.Clients;
 using LolTeamTracker.Api.Models;
+using LolTeamTracker.Api.Models.Entities;
 using LolTeamTracker.Api.Repositories;
 using LolTeamTracker.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -44,12 +45,33 @@ namespace LolTeamTracker.Tests.Services
         /// </summary>
         private static MatchAnalyzer CreateSut(
             Mock<IRiotApiClient> riotApiClient,
-            Mock<ITeamRepository>? teamRepository = null)
+            Mock<ITeamRepository>? teamRepository = null,
+            Mock<IEfQueueDefinitionRepository>? queueDefinitionRepository = null)
         {
             return new MatchAnalyzer(
                 riotApiClient.Object,
                 teamRepository?.Object ?? Mock.Of<ITeamRepository>(),
+                queueDefinitionRepository?.Object ?? CreateDefaultQueueDefinitionRepository(),
                 NullLogger<MatchAnalyzer>.Instance);   // 日誌不影響斷言，用官方的空實作
+        }
+
+        /// <summary>
+        /// 模式對照表的預設替身。內容取自 QueueDefinitions 資料表的常用幾筆——
+        /// 多數測試不關心模式名稱，但 MatchAnalyzer 會在解析比賽時載入它。
+        /// </summary>
+        private static IEfQueueDefinitionRepository CreateDefaultQueueDefinitionRepository()
+        {
+            var mock = new Mock<IEfQueueDefinitionRepository>();
+            mock.Setup(r => r.LoadQueueDefinitionDataAsync())
+                .ReturnsAsync(new List<QueueDefinition>
+                {
+                    new() { Id = 400, Name = "Normal Draft Pick（一般選角）" },
+                    new() { Id = 420, Name = "單雙積分 Solo/Duo Ranked" },
+                    new() { Id = 430, Name = "Normal Blind Pick（一般盲選）" },
+                    new() { Id = 440, Name = "彈性積分 Flex Ranked" },
+                    new() { Id = 450, Name = "大亂鬥 ARAM" },
+                });
+            return mock.Object;
         }
 
         /// <summary>

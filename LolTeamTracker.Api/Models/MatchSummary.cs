@@ -11,6 +11,7 @@
         public bool Win { get; set; }
         public string LaneName { get; set; } // 玩家路線
         public string GameDate { get; set; } // 遊戲時間
+        public int GameModeId { get; set; } // 遊戲模式 queueId
         public string GameMode { get; set; } // 遊戲模式
 
         public int LaneCS { get; set; } // totalMinionsKilled 線上小兵

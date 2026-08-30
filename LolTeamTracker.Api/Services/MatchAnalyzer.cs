@@ -11,12 +11,34 @@ namespace LolTeamTracker.Api.Services
         private readonly IRiotApiClient _riotApiClient;
         private readonly ITeamRepository _teamRepository;
         private readonly ILogger<MatchAnalyzer> _logger;
+        private readonly IEfQueueDefinitionRepository _queueDefinitionRepository;
 
-        public MatchAnalyzer( IRiotApiClient riotApiClient, ITeamRepository teamRepository, ILogger<MatchAnalyzer> logger)
+        /// <summary>
+        /// 遊戲模式對照表（queueId → 名稱），整個請求期間只從資料庫載入一次。
+        /// </summary>
+        /// <remarks>
+        /// </remarks>
+        private Dictionary<int, string>? _queueNames;
+
+        public MatchAnalyzer(
+            IRiotApiClient riotApiClient,
+            ITeamRepository teamRepository,
+            IEfQueueDefinitionRepository queueDefinitionRepository,
+            ILogger<MatchAnalyzer> logger)
         {
             _riotApiClient = riotApiClient;
             _teamRepository = teamRepository;
+            _queueDefinitionRepository = queueDefinitionRepository;
             _logger = logger;
+        }
+
+        /// <summary>
+        /// 確保模式對照表已載入。已載入過就直接返回，不會重複查詢。
+        /// </summary>
+        private async Task EnsureQueueNamesLoadedAsync()
+        {
+            _queueNames ??= (await _queueDefinitionRepository.LoadQueueDefinitionDataAsync())
+                            .ToDictionary(q => q.Id, q => q.Name);
         }
 
         /// <summary>
@@ -29,6 +51,9 @@ namespace LolTeamTracker.Api.Services
         /// <returns></returns>
         public async Task<MatchSummary?> GetMatchSummaryAsync(string matchId, string puuid, string gameName, string tagLine)
         {
+            // 模式對照表只在第一次進來時載入，後續呼叫直接用記憶體裡的字典。
+            await EnsureQueueNamesLoadedAsync();
+
             var data = await _riotApiClient.GetMatchSummaryAsync(matchId);
 
             // TODO : refactor : 換model裝 GetProperty ..
@@ -79,6 +104,7 @@ namespace LolTeamTracker.Api.Services
                 Win = win,
                 LaneName = laneName,
                 GameDate = taiwanTime,
+                GameModeId = queueId,
                 GameMode = queueName,
                 LaneCS = laneCS,
                 JungleCS = jungleCS,
@@ -159,17 +185,17 @@ namespace LolTeamTracker.Api.Services
         /// <returns>返回模式名稱</returns>
         public string GetQueueTypeName(int queueId)
         {
-            switch (queueId)
+            // Riot 新增模式時只要 INSERT 一列，不必改程式碼重新部署。
+            if (_queueNames is null)
             {
-                case 400: return "Normal Draft Pick（一般選角）";
-                case 420: return "單雙積分 Solo/Duo Ranked";
-                case 430: return "Normal Blind Pick（一般盲選）";
-                case 440: return "彈性積分 Flex Ranked";
-                case 450: return "大亂鬥 ARAM";
-                case 480: return "一般(超速衝點)";
-                case 750: return "Clash 盃";
-                default: return $"未知模式 (QueueId={queueId})";
+                // 呼叫端沒先載入就用——回退到「未知」而不是丟例外，
+                // 與查無此 queueId 的處理一致：對照表缺漏不該讓整場戰績查詢失敗。
+                return $"未知模式 (QueueId={queueId})";
             }
+
+            return _queueNames.TryGetValue(queueId, out var name)
+                ? name
+                : $"未知模式 (QueueId={queueId})";
         }
 
         /// <summary>

@@ -67,6 +67,7 @@ builder.Services.AddScoped<IStaticDataService, StaticDataService>();
 builder.Services.AddScoped<IDataDragonClient, DataDragonClient>();
 builder.Services.AddScoped<IStaticDataRepository, StaticDataRepository>();
 builder.Services.AddScoped<IEfMatchPlayerRepository, EfMatchPlayerRepository>();
+builder.Services.AddScoped<IEfQueueDefinitionRepository, EfQueueDefinitionRepository>();
 
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle

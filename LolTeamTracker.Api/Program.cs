@@ -27,21 +27,23 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // "AccountBaseUrl": "https://asia.api.riotgames.com",
 builder.Services.AddHttpClient("Account", client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["RiotApi:AccountBaseUrl"]!);
+    client.BaseAddress = new Uri(builder.Configuration["RiotApi:AccountBaseUrl"]!); // appsettings.json 讀取 Riot API AccountBaseUrl
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Clear();
     client.DefaultRequestHeaders.Add("X-Riot-Token",
-        builder.Configuration["RiotApi:ApiKey"]);
+        // User Secrets 存放 API Key ( 本機開發用) ,
+        // Docker佈署環境為 .env的 {RIOT_API_KEY}取得後載入 )
+        builder.Configuration["RiotApi:ApiKey"]); 
 });
 
 // "RegionBaseUrl": "https://sea.api.riotgames.com"
 builder.Services.AddHttpClient("Match", client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["RiotApi:RegionBaseUrl"]!);
+    client.BaseAddress = new Uri(builder.Configuration["RiotApi:RegionBaseUrl"]!); // appsettings.json 讀取 Riot API RegionBaseUrl
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Clear();
-    client.DefaultRequestHeaders.Add("X-Riot-Token", 
-        builder.Configuration["RiotApi:ApiKey"]);
+    client.DefaultRequestHeaders.Add("X-Riot-Token",
+        builder.Configuration["RiotApi:ApiKey"]); // User Secrets 存放 API Key (本機開發)
 });
 
 // 全域例外處理 GlobalException

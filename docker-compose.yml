@@ -50,7 +50,7 @@ services:
       dockerfile: LolTeamTracker.Api/Dockerfile
     container_name: lolteamtracker-api
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT-Production}
       ConnectionStrings__DefaultConnection: "Server=mssql,1433;Database=LolTeamTracker;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True"
       RiotApi__ApiKey: ${RIOT_API_KEY}
     ports:
